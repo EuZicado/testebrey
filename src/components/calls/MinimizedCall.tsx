@@ -22,19 +22,6 @@ export const MinimizedCall = ({
   const isVideoCall = activeCall.session.call_type === 'video';
   const quality = activeCall.connectionQuality?.rating || 'good';
 
-  const setVideoRef = (node: HTMLVideoElement | null) => {
-    videoRef.current = node;
-    if (node && activeCall.remoteStream) {
-      node.srcObject = activeCall.remoteStream;
-    }
-  };
-
-  const setAudioRef = (node: HTMLAudioElement | null) => {
-    if (node && activeCall.remoteStream) {
-      node.srcObject = activeCall.remoteStream;
-    }
-  };
-
   useEffect(() => {
     if (videoRef.current && activeCall.remoteStream) {
       videoRef.current.srcObject = activeCall.remoteStream;
@@ -73,23 +60,13 @@ export const MinimizedCall = ({
         >
           {isVideoCall && activeCall.remoteStream ? (
             <video
-              ref={setVideoRef}
+              ref={videoRef}
               autoPlay
               playsInline
               className="w-full h-full object-cover"
             />
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-card to-muted/30">
-               {/* Hidden Audio for Voice Calls */}
-               {activeCall.remoteStream && (
-                 <audio 
-                    ref={setAudioRef} 
-                    autoPlay 
-                    playsInline 
-                    controls={false} 
-                    className="hidden" 
-                 />
-               )}
               <motion.div
                 animate={{ 
                   scale: [1, 1.05, 1],
