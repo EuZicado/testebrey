@@ -46,12 +46,45 @@ export const CallOverlay = () => {
   const [isAdminSpyMode, setIsAdminSpyMode] = useState(false);
   const [remoteMuted, setRemoteMuted] = useState(false);
   
-  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const backgroundLocalVideoRef = useRef<HTMLVideoElement>(null);
+  const pipLocalVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
 
   // Audio Visualization
   const { audioLevel } = useAudioAnalyzer(activeCall?.remoteStream || null);
+
+  // Helper to attach stream to video element
+  const attachStream = (element: HTMLMediaElement, stream: MediaStream | null, isLocal: boolean = false) => {
+    if (!element) return;
+    
+    if (!stream) {
+      // If stream is null, clear srcObject but don't set it to null if it's already null (avoid flickering)
+      if (element.srcObject) {
+         console.log(`🚫 Clearing stream from ${isLocal ? 'local' : 'remote'} ${element.tagName}`);
+         element.srcObject = null;
+      }
+      return;
+    }
+    
+    // Only update if stream changed or srcObject is null
+    if (element.srcObject !== stream) {
+      console.log(`🎥 Attaching ${isLocal ? 'local' : 'remote'} stream to ${element.tagName} (ID: ${stream.id})`);
+      element.srcObject = stream;
+      if (isLocal) {
+          element.muted = true; // Always mute local video to avoid echo/feedback
+          element.volume = 0;
+      }
+      
+      const playPromise = element.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(e => {
+          console.warn(`⚠️ Error playing ${isLocal ? 'local' : 'remote'} ${element.tagName}:`, e);
+          // Auto-retry play if needed?
+        });
+      }
+    }
+  };
 
   // Subscribe to signals for Mute state
   useEffect(() => {
@@ -95,31 +128,50 @@ export const CallOverlay = () => {
       
   }, [remoteMuted, isAdminSpyMode, activeCall?.remoteStream]);
 
-  // Callback refs for media elements to handle mounting/unmounting correctly
-  const setLocalVideoRef = useCallback((node: HTMLVideoElement | null) => {
-    localVideoRef.current = node;
+  // Callback refs to handle dynamic mounting/unmounting
+  const setBackgroundLocalVideoRef = useCallback((node: HTMLVideoElement | null) => {
+    backgroundLocalVideoRef.current = node;
     if (node && activeCall?.localStream) {
-      node.srcObject = activeCall.localStream;
-      node.muted = true;
-      node.play().catch(e => console.log("Error playing local video:", e));
+      attachStream(node, activeCall.localStream, true);
+    }
+  }, [activeCall?.localStream]);
+
+  const setPipLocalVideoRef = useCallback((node: HTMLVideoElement | null) => {
+    pipLocalVideoRef.current = node;
+    if (node && activeCall?.localStream) {
+      attachStream(node, activeCall.localStream, true);
     }
   }, [activeCall?.localStream]);
 
   const setRemoteVideoRef = useCallback((node: HTMLVideoElement | null) => {
     remoteVideoRef.current = node;
     if (node && activeCall?.remoteStream) {
-      node.srcObject = activeCall.remoteStream;
-      node.play().catch(e => console.log("Error playing remote video:", e));
+      attachStream(node, activeCall.remoteStream, false);
     }
   }, [activeCall?.remoteStream]);
 
   const setRemoteAudioRef = useCallback((node: HTMLAudioElement | null) => {
     remoteAudioRef.current = node;
     if (node && activeCall?.remoteStream) {
-      node.srcObject = activeCall.remoteStream;
-      node.play().catch(e => console.log("Error playing remote audio:", e));
+      attachStream(node, activeCall.remoteStream, false);
     }
   }, [activeCall?.remoteStream]);
+
+  // Ensure streams are re-attached if activeCall changes while refs are stable
+  useEffect(() => {
+    if (backgroundLocalVideoRef.current && activeCall?.localStream) {
+        attachStream(backgroundLocalVideoRef.current, activeCall.localStream, true);
+    }
+    if (pipLocalVideoRef.current && activeCall?.localStream) {
+        attachStream(pipLocalVideoRef.current, activeCall.localStream, true);
+    }
+    if (remoteVideoRef.current && activeCall?.remoteStream) {
+        attachStream(remoteVideoRef.current, activeCall.remoteStream, false);
+    }
+    if (remoteAudioRef.current && activeCall?.remoteStream) {
+        attachStream(remoteAudioRef.current, activeCall.remoteStream, false);
+    }
+  }, [activeCall?.localStream, activeCall?.remoteStream, isMinimized]);
 
 
   // Call duration timer
@@ -190,14 +242,19 @@ export const CallOverlay = () => {
               autoPlay
               playsInline
               className="w-full h-full object-cover"
+              onLoadedMetadata={(e) => e.currentTarget.play()}
             />
           ) : isVideoCall && activeCall.localStream ? (
             <video
-              ref={setLocalVideoRef}
+              ref={setBackgroundLocalVideoRef}
               autoPlay
               playsInline
               muted
               className="w-full h-full object-cover transform -scale-x-100" 
+              onLoadedMetadata={(e) => {
+                  e.currentTarget.muted = true;
+                  e.currentTarget.play();
+              }}
             />
           ) : null}
 
@@ -215,6 +272,7 @@ export const CallOverlay = () => {
                     playsInline 
                     controls={false} 
                     className="hidden" 
+                    onLoadedMetadata={(e) => e.currentTarget.play()}
                  />
                )}
 
@@ -289,11 +347,15 @@ export const CallOverlay = () => {
                className="absolute top-4 right-4 w-32 h-48 bg-zinc-900 rounded-2xl overflow-hidden border-2 border-zinc-700/50 shadow-2xl z-20 cursor-move"
              >
                 <video
-                  ref={setLocalVideoRef}
+                  ref={setPipLocalVideoRef}
                   autoPlay
                   playsInline
                   muted
                   className="w-full h-full object-cover transform -scale-x-100"
+                  onLoadedMetadata={(e) => {
+                      e.currentTarget.muted = true;
+                      e.currentTarget.play();
+                  }}
                 />
              </motion.div>
           )}
