@@ -331,9 +331,46 @@ export const useWebRTC = () => {
       callChannelRef.current = channel;
   }, [handleSignal, activeCall?.session.status, cleanup]);
 
+  // Função para verificar permissões antes de iniciar
+  const checkPermissions = useCallback(async (type: CallType) => {
+      try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+              audio: true,
+              video: type === 'video'
+          });
+          // Libera logo em seguida, só para testar
+          stream.getTracks().forEach(t => t.stop());
+          return true;
+      } catch (e) {
+          console.error("Erro de permissão:", e);
+          return false;
+      }
+  }, []);
+
   // Função para iniciar chamada
   const startCall = useCallback(async (conversationId: string, calleeId: string, callType: CallType) => {
-    if (!user) return;
+    if (!user) {
+        toast.error("Você precisa estar logado para fazer chamadas.");
+        return;
+    }
+    
+    if (!conversationId || !calleeId) {
+        toast.error("Erro interno: ID da conversa ou usuário inválido.");
+        console.error("Missing params:", { conversationId, calleeId });
+        return;
+    }
+
+    if (!navigator.onLine) {
+        toast.error("Sem conexão com a internet.");
+        return;
+    }
+
+    const hasPermission = await checkPermissions(callType);
+    if (!hasPermission) {
+        toast.error("Permissão de câmera/microfone necessária. Verifique suas configurações.");
+        return;
+    }
+
     setIsConnecting(true);
 
     try {
@@ -392,10 +429,33 @@ export const useWebRTC = () => {
       // 7. Inscrever nos sinais
       subscribeToSignals(session.id);
 
-    } catch (e) {
+      // Timeout de segurança: Se não conectar em 45s, encerra
+      setTimeout(async () => {
+          if (pc.current && pc.current.connectionState !== 'connected' && pc.current.connectionState !== 'connecting') {
+              console.warn("⚠️ Call timeout - no connection established.");
+              // Apenas limpa se ainda estiver tentando conectar (status initiating ou ringing)
+              const { data } = await supabase.from('call_sessions').select('status').eq('id', session.id).single();
+              if (data && (data.status === 'initiating' || data.status === 'ringing')) {
+                   toast.error("Não foi possível estabelecer conexão com o usuário.");
+                   cleanup();
+                   await supabase.from('call_sessions').update({ status: 'missed' }).eq('id', session.id);
+              }
+          }
+      }, 45000);
+
+    } catch (e: any) {
       console.error("Erro ao iniciar chamada:", e);
       cleanup();
-      toast.error("Erro ao iniciar chamada.");
+      
+      if (e?.code === 'PGRST116') {
+         toast.error("Erro de permissão ou dados inválidos ao criar chamada.");
+      } else if (e?.name === 'NotAllowedError' || e?.name === 'PermissionDeniedError') {
+         toast.error("Permissão de câmera/microfone negada.");
+      } else if (e?.name === 'NotFoundError') {
+         toast.error("Dispositivo de câmera/microfone não encontrado.");
+      } else {
+         toast.error(`Erro ao iniciar chamada: ${e.message || 'Erro desconhecido'}`);
+      }
     }
   }, [user, getUserMedia, createPeerConnection, cleanup, subscribeToSignals]);
 
