@@ -99,20 +99,22 @@ export const CallOverlay = () => {
   useEffect(() => {
     if (localVideoRef.current && activeCall?.localStream) {
       localVideoRef.current.srcObject = activeCall.localStream;
-      // Ensure local video is always muted to prevent echo
       localVideoRef.current.muted = true;
+      localVideoRef.current.play().catch(e => console.log("Error playing local video:", e));
     }
-  }, [activeCall?.localStream, isMinimized]); // Add isMinimized to force update on maximize
+  }, [activeCall?.localStream, isMinimized]); 
 
   useEffect(() => {
     if (remoteVideoRef.current && activeCall?.remoteStream) {
       remoteVideoRef.current.srcObject = activeCall.remoteStream;
+      remoteVideoRef.current.play().catch(e => console.log("Error playing remote video:", e));
     }
-    // CORREÇÃO: Anexar stream de áudio se for chamada de voz
+    
     if (remoteAudioRef.current && activeCall?.remoteStream) {
       remoteAudioRef.current.srcObject = activeCall.remoteStream;
+      remoteAudioRef.current.play().catch(e => console.log("Error playing remote audio:", e));
     }
-  }, [activeCall?.remoteStream, isMinimized]); // Add isMinimized to force update on maximize
+  }, [activeCall?.remoteStream, isMinimized]);
 
 
   // Call duration timer

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Loader2, Phone, Video, Minimize2 } from "lucide-react";
+import { Loader2, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useConversationMessages, useOtherParticipant } from "@/hooks/messages";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
@@ -29,39 +29,60 @@ export const ChatView = ({ conversationId, onBack }: ChatViewProps) => {
   const { typingUsers, startTyping, stopTyping } = useTypingIndicator(conversationId);
   const { onlineUsers } = usePresence();
   const { toggleReaction, getReactionCounts } = useMessageReactions(conversationId);
-  const { activeCall, startCall } = useCall();
+  const { activeCall } = useCall();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const [shouldScrollToBottom, setShouldScrollToBottom] = useState(true);
 
   const isInCallWithUser = activeCall?.session.conversation_id === conversationId;
+  const isOtherUserTyping = otherUser ? typingUsers.includes(otherUser.id) : false;
+  const isOtherUserOnline = otherUser ? onlineUsers.includes(otherUser.id) : false;
 
-  // Scroll to bottom on new messages
+  // Initial Scroll
   useEffect(() => {
-    if (isAtBottom) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!isLoading && messages.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
     }
-  }, [messages, isAtBottom]);
+  }, [isLoading, conversationId]);
+
+  // Smart Scroll on new messages
+  useEffect(() => {
+    if (messages.length === 0) return;
+    
+    const lastMessage = messages[messages.length - 1];
+    const isOwnMessage = lastMessage.sender_id === user?.id;
+    
+    if (isOwnMessage || isAtBottom) {
+       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, isAtBottom, user?.id]);
 
   // Mark messages as read
   useEffect(() => {
-    markAsRead();
-  }, [messages, markAsRead]);
+    if (messages.length > 0 && isAtBottom) {
+      markAsRead();
+    }
+  }, [messages, isAtBottom, markAsRead]);
 
   const handleScroll = useCallback(() => {
     if (containerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
-      setIsAtBottom(scrollHeight - scrollTop - clientHeight < 100);
+      const distanceToBottom = scrollHeight - scrollTop - clientHeight;
+      setIsAtBottom(distanceToBottom < 100);
     }
   }, []);
 
   const handleSendMessage = useCallback(
     async (content: string, stickerUrl?: string) => {
-      const result = await sendMessage(content, stickerUrl);
-      if (!result.success) {
-        toast.error(result.error || "Erro ao enviar mensagem");
-        throw new Error(result.error);
+      try {
+        const result = await sendMessage(content, stickerUrl);
+        if (!result.success) throw new Error(result.error);
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      } catch (error) {
+        toast.error("Erro ao enviar mensagem");
+        console.error(error);
       }
     },
     [sendMessage]
@@ -69,42 +90,39 @@ export const ChatView = ({ conversationId, onBack }: ChatViewProps) => {
 
   const handleSendAudio = useCallback(
     async (audioBlob: Blob, duration: number) => {
-      const result = await sendAudioMessage(audioBlob, duration);
-      if (!result.success) {
-        toast.error(result.error || "Erro ao enviar áudio");
-        throw new Error(result.error);
+      try {
+        const result = await sendAudioMessage(audioBlob, duration);
+        if (!result.success) throw new Error(result.error);
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      } catch (error) {
+        toast.error("Erro ao enviar áudio");
+        console.error(error);
       }
     },
     [sendAudioMessage]
   );
 
-  const isOtherUserTyping = otherUser ? typingUsers.includes(otherUser.id) : false;
-  const isOtherUserOnline = otherUser ? onlineUsers.includes(otherUser.id) : false;
-
   const renderDateSeparator = (currentMessage: any, previousMessage: any) => {
     if (!previousMessage) return true;
-    
     const currentDate = new Date(currentMessage.created_at);
     const previousDate = new Date(previousMessage.created_at);
-    
     return !isSameDay(currentDate, previousDate);
   };
 
   if (isLoading) {
     return (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-background gap-3">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Carregando conversa...</p>
+      <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-zinc-950">
+        <Loader2 className="w-10 h-10 animate-spin text-emerald-500" />
       </div>
     );
   }
 
   return (
     <motion.div
-      initial={{ x: "100%" }}
-      animate={{ x: 0 }}
-      exit={{ x: "100%" }}
-      className="fixed inset-0 bg-background z-[50] flex flex-col"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-zinc-950 z-[50] flex flex-col font-sans"
     >
       <ChatHeader
         conversationId={conversationId}
@@ -117,25 +135,21 @@ export const ChatView = ({ conversationId, onBack }: ChatViewProps) => {
         onBack={onBack}
       />
 
-      {/* In-Call Banner (Sticky) */}
+      {/* In-Call Banner */}
       <AnimatePresence>
         {isInCallWithUser && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="bg-emerald-500/10 border-b border-emerald-500/20 px-4 py-2 flex items-center justify-between backdrop-blur-sm"
+            className="bg-emerald-950/30 border-b border-emerald-500/20 px-4 py-2 flex items-center justify-center backdrop-blur-md"
           >
             <div className="flex items-center gap-2">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
-              <span className="text-sm font-medium text-emerald-400 tracking-tight">Chamada ativa</span>
-            </div>
-            <div className="flex items-center gap-2">
-               {/* Controls could go here, but Overlay handles it. Maybe a 'Return to Call' button? */}
-               {/* The overlay is already visible or minimized. This is just an indicator. */}
+              <span className="text-xs font-medium text-emerald-400 tracking-wide uppercase">Chamada em andamento</span>
             </div>
           </motion.div>
         )}
@@ -145,10 +159,10 @@ export const ChatView = ({ conversationId, onBack }: ChatViewProps) => {
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-4 bg-gradient-to-b from-zinc-950 to-black scroll-smooth"
+        className="flex-1 overflow-y-auto px-2 sm:px-4 py-4 bg-gradient-to-b from-zinc-950 to-black scroll-smooth"
       >
         {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center px-8 opacity-60">
+          <div className="flex flex-col items-center justify-center h-full text-center px-8 opacity-80">
             <motion.div 
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -157,13 +171,13 @@ export const ChatView = ({ conversationId, onBack }: ChatViewProps) => {
             >
               <span className="text-4xl">👋</span>
             </motion.div>
-            <p className="text-zinc-400 font-medium text-lg">Nenhuma mensagem ainda</p>
-            <p className="text-sm text-zinc-600 mt-2 max-w-[200px]">
-              Diga oi para {otherUser?.display_name || "este usuário"} e comece uma nova conexão!
+            <p className="text-zinc-300 font-semibold text-xl">Diga Olá!</p>
+            <p className="text-sm text-zinc-500 mt-2 max-w-[240px]">
+              Comece a conversa com {otherUser?.display_name || "este usuário"}.
             </p>
           </div>
         ) : (
-          <div className="space-y-6 pb-4">
+          <div className="space-y-6 pb-4 max-w-3xl mx-auto w-full">
             {messages.map((message, index) => {
               const previousMessage = messages[index - 1];
               const showDateSeparator = renderDateSeparator(message, previousMessage);
@@ -177,15 +191,10 @@ export const ChatView = ({ conversationId, onBack }: ChatViewProps) => {
               const reactions = getReactionCounts(message.id);
 
               return (
-                <motion.div 
-                    key={message.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.2 }}
-                >
+                <div key={message.id}>
                   {showDateSeparator && (
-                    <div className="flex justify-center my-6">
-                      <span className="bg-zinc-900/80 backdrop-blur-md text-zinc-500 text-[10px] font-medium px-3 py-1 rounded-full uppercase tracking-wider border border-zinc-800 shadow-sm">
+                    <div className="flex justify-center my-8 sticky top-2 z-10">
+                      <span className="bg-zinc-900/90 backdrop-blur-md text-zinc-500 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest border border-zinc-800/50 shadow-sm">
                         {format(new Date(message.created_at), "d 'de' MMMM", { locale: ptBR })}
                       </span>
                     </div>
@@ -205,7 +214,7 @@ export const ChatView = ({ conversationId, onBack }: ChatViewProps) => {
                     reactions={reactions}
                     onToggleReaction={toggleReaction}
                   />
-                </motion.div>
+                </div>
               );
             })}
 
@@ -214,14 +223,16 @@ export const ChatView = ({ conversationId, onBack }: ChatViewProps) => {
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex items-end gap-2 mt-2 ml-2"
+                className="flex items-end gap-2 mt-2"
               >
-                {otherUser?.avatar_url && (
+                {otherUser?.avatar_url ? (
                   <img
                     src={otherUser.avatar_url}
                     alt=""
-                    className="w-6 h-6 rounded-full object-cover ring-2 ring-background"
+                    className="w-6 h-6 rounded-full object-cover ring-2 ring-zinc-950"
                   />
+                ) : (
+                   <div className="w-6 h-6 rounded-full bg-zinc-800 ring-2 ring-zinc-950" />
                 )}
                 <div className="bg-zinc-900 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm border border-zinc-800">
                   <TypingIndicator />
@@ -229,18 +240,20 @@ export const ChatView = ({ conversationId, onBack }: ChatViewProps) => {
               </motion.div>
             )}
 
-            <div ref={messagesEndRef} />
+            <div ref={messagesEndRef} className="h-1" />
           </div>
         )}
       </div>
 
-      <div className="p-2 bg-background/80 backdrop-blur-md border-t border-border/50">
-        <MessageInput
-          onSend={handleSendMessage}
-          onSendAudio={handleSendAudio}
-          onTypingStart={startTyping}
-          onTypingStop={stopTyping}
-        />
+      <div className="p-2 bg-zinc-950/80 backdrop-blur-xl border-t border-white/5 max-w-full">
+        <div className="max-w-3xl mx-auto w-full">
+            <MessageInput
+            onSend={handleSendMessage}
+            onSendAudio={handleSendAudio}
+            onTypingStart={startTyping}
+            onTypingStop={stopTyping}
+            />
+        </div>
       </div>
     </motion.div>
   );
