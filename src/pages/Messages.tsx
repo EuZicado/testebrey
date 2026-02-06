@@ -85,7 +85,7 @@ const Messages = () => {
 
   return (
     <AppLayout>
-      <div className="relative flex flex-col h-screen bg-black overflow-hidden font-sans">
+      <div className="relative flex flex-col h-screen bg-zinc-950 overflow-hidden font-sans">
         
         {/* ChatView Overlay - Resolve o problema do BottomNav */}
         <AnimatePresence>
