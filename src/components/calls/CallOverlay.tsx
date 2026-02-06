@@ -97,27 +97,20 @@ export const CallOverlay = () => {
 
   // Update video refs when streams change
   useEffect(() => {
-    const videoEl = localVideoRef.current;
-    if (videoEl && activeCall?.localStream) {
-      videoEl.srcObject = activeCall.localStream;
+    if (localVideoRef.current && activeCall?.localStream) {
+      localVideoRef.current.srcObject = activeCall.localStream;
       // Ensure local video is always muted to prevent echo
-      videoEl.muted = true;
-      videoEl.play().catch(console.error);
+      localVideoRef.current.muted = true;
     }
   }, [activeCall?.localStream, isMinimized]); // Add isMinimized to force update on maximize
 
   useEffect(() => {
-    const videoEl = remoteVideoRef.current;
-    if (videoEl && activeCall?.remoteStream) {
-      videoEl.srcObject = activeCall.remoteStream;
-      videoEl.play().catch(console.error);
+    if (remoteVideoRef.current && activeCall?.remoteStream) {
+      remoteVideoRef.current.srcObject = activeCall.remoteStream;
     }
-    
-    // CORREÇÃO: Anexar stream de áudio se for chamada de voz ou se o vídeo falhar
-    const audioEl = remoteAudioRef.current;
-    if (audioEl && activeCall?.remoteStream) {
-      audioEl.srcObject = activeCall.remoteStream;
-      audioEl.play().catch(console.error);
+    // CORREÇÃO: Anexar stream de áudio se for chamada de voz
+    if (remoteAudioRef.current && activeCall?.remoteStream) {
+      remoteAudioRef.current.srcObject = activeCall.remoteStream;
     }
   }, [activeCall?.remoteStream, isMinimized]); // Add isMinimized to force update on maximize
 

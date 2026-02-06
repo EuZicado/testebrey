@@ -128,11 +128,11 @@ export const MessageBubble = ({
           {/* Message bubble */}
           <div
             className={cn(
-              "max-w-[75vw] rounded-2xl px-4 py-2.5 shadow-sm transition-all duration-200",
+              "max-w-[75vw] rounded-2xl px-4 py-2",
               isOwn
-                ? "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-md shadow-emerald-500/10 rounded-tr-sm"
-                : "bg-zinc-800/80 backdrop-blur-sm border border-white/5 text-zinc-100 shadow-sm rounded-tl-sm",
-              hasSticker && "bg-transparent px-0 py-0 border-none shadow-none"
+                ? "bg-primary text-primary-foreground rounded-br-sm"
+                : "bg-muted text-foreground rounded-bl-sm",
+              hasSticker && "bg-transparent px-0 py-0"
             )}
           >
             {hasAudio ? (
