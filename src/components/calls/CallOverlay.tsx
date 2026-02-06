@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { 
   Mic, 
   MicOff, 
@@ -222,13 +222,7 @@ export const CallOverlay = () => {
   }
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[100] bg-zinc-950 flex flex-col font-sans"
-      >
+    <div className="fixed inset-0 z-[100] bg-zinc-950 flex flex-col font-sans">
         {/* Main Content Area */}
         <div className="relative flex-1 w-full overflow-hidden">
           
@@ -241,7 +235,7 @@ export const CallOverlay = () => {
               ref={setRemoteVideoRef}
               autoPlay
               playsInline
-              className="w-full h-full object-cover"
+              className="absolute inset-0 w-full h-full object-cover z-0"
               onLoadedMetadata={(e) => e.currentTarget.play()}
             />
           ) : isVideoCall && activeCall.localStream ? (
@@ -250,7 +244,7 @@ export const CallOverlay = () => {
               autoPlay
               playsInline
               muted
-              className="w-full h-full object-cover transform -scale-x-100" 
+              className="absolute inset-0 w-full h-full object-cover transform -scale-x-100 z-0" 
               onLoadedMetadata={(e) => {
                   e.currentTarget.muted = true;
                   e.currentTarget.play();
@@ -261,7 +255,7 @@ export const CallOverlay = () => {
           {/* Avatar & Status Overlay */}
           {(!isVideoCall || !activeCall.remoteStream) && (
             <div className={cn(
-              "absolute inset-0 flex flex-col items-center justify-center",
+              "absolute inset-0 z-10 flex flex-col items-center justify-center",
               (isVideoCall && activeCall.localStream) ? "bg-black/40 backdrop-blur-sm" : "bg-zinc-900"
             )}>
                {/* Hidden Audio Element for Voice Calls */}
@@ -521,7 +515,6 @@ export const CallOverlay = () => {
             onClose={() => setShowChat(false)}
           />
 
-      </motion.div>
-    </AnimatePresence>
+    </div>
   );
 };
