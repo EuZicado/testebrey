@@ -46,6 +46,7 @@ export const CallOverlay = () => {
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
 
   // Audio Visualization
   const { audioLevel } = useAudioAnalyzer(activeCall?.remoteStream || null);
@@ -60,6 +61,10 @@ export const CallOverlay = () => {
   useEffect(() => {
     if (remoteVideoRef.current && activeCall?.remoteStream) {
       remoteVideoRef.current.srcObject = activeCall.remoteStream;
+    }
+    // CORREÇÃO: Anexar stream de áudio se for chamada de voz
+    if (remoteAudioRef.current && activeCall?.remoteStream) {
+      remoteAudioRef.current.srcObject = activeCall.remoteStream;
     }
   }, [activeCall?.remoteStream]);
 
@@ -135,6 +140,17 @@ export const CallOverlay = () => {
           ) : (
              // Avatar Display when no video
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900">
+               {/* Hidden Audio Element for Voice Calls */}
+               {activeCall.remoteStream && (
+                 <audio 
+                    ref={remoteAudioRef} 
+                    autoPlay 
+                    playsInline 
+                    controls={false} 
+                    className="hidden" 
+                 />
+               )}
+
                {/* Pulsing Effect based on Audio Level */}
                {isConnected && (
                   <motion.div
