@@ -14,6 +14,7 @@ export const useWebRTC = () => {
   
   const pc = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const candidatesQueue = useRef<RTCIceCandidateInit[]>([]);
   const isDescriptionSet = useRef(false);
@@ -106,6 +107,11 @@ export const useWebRTC = () => {
       localStreamRef.current = null;
     }
     
+    if (remoteStreamRef.current) {
+        remoteStreamRef.current.getTracks().forEach(track => track.stop());
+        remoteStreamRef.current = null;
+    }
+
     if (screenStreamRef.current) {
       screenStreamRef.current.getTracks().forEach(track => track.stop());
       screenStreamRef.current = null;
@@ -329,6 +335,7 @@ export const useWebRTC = () => {
       console.log("📥 Track remoto recebido:", event.track.kind);
       const [remoteStream] = event.streams;
       if (remoteStream) {
+          remoteStreamRef.current = remoteStream;
           setActiveCall(prev => prev ? { ...prev, remoteStream } : null);
       }
     };
@@ -342,12 +349,19 @@ export const useWebRTC = () => {
         startStatsMonitoring();
 
         // Atualiza sessão para connected via banco (redundância)
+        const now = new Date().toISOString();
         supabase.from('call_sessions')
-          .update({ status: 'connected', started_at: new Date().toISOString() })
+          .update({ status: 'connected', started_at: now })
           .eq('id', callId)
           .then(({ error }) => {
               if (error) console.error("Erro ao atualizar status para connected:", error);
           });
+          
+        // Atualiza estado local com started_at para o timer funcionar
+        setActiveCall(prev => prev ? { 
+            ...prev, 
+            session: { ...prev.session, status: 'connected', started_at: now } 
+        } : null);
       }
       
       if (state === 'failed') {
@@ -637,12 +651,13 @@ export const useWebRTC = () => {
         });
 
         // 7. Atualizar status
-        await supabase.from('call_sessions').update({ status: 'connected', started_at: new Date().toISOString() }).eq('id', callId);
+        const now = new Date().toISOString();
+        await supabase.from('call_sessions').update({ status: 'connected', started_at: now }).eq('id', callId);
 
         setActiveCall({
-            session: { ...incomingCall.session, status: 'connected' },
+            session: { ...incomingCall.session, status: 'connected', started_at: now },
             localStream: stream,
-            remoteStream: null,
+            remoteStream: remoteStreamRef.current, // Usa o ref caso o ontrack já tenha disparado
             isScreenSharing: false,
             otherParticipant: incomingCall.caller,
             screenStream: null,
