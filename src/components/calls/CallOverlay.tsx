@@ -46,56 +46,9 @@ export const CallOverlay = () => {
   const [isAdminSpyMode, setIsAdminSpyMode] = useState(false);
   const [remoteMuted, setRemoteMuted] = useState(false);
   
-  const localVideoRef = useRef<HTMLVideoElement | null>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
-  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
-
-  // Callback refs to handle element mounting/unmounting reliably
-  const setLocalVideoRef = useCallback((node: HTMLVideoElement | null) => {
-    localVideoRef.current = node;
-    if (node && activeCall?.localStream) {
-        node.srcObject = activeCall.localStream;
-        node.muted = true;
-        node.playsInline = true;
-    }
-  }, [activeCall?.localStream]);
-
-  const setRemoteVideoRef = useCallback((node: HTMLVideoElement | null) => {
-    remoteVideoRef.current = node;
-    if (node && activeCall?.remoteStream) {
-        node.srcObject = activeCall.remoteStream;
-        // Apply mute state if needed
-        node.muted = remoteMuted && !isAdminSpyMode;
-        node.playsInline = true;
-        
-        // Force play to ensure video starts
-        node.play().catch(console.error);
-    }
-  }, [activeCall?.remoteStream, remoteMuted, isAdminSpyMode]);
-
-  const setRemoteAudioRef = useCallback((node: HTMLAudioElement | null) => {
-    remoteAudioRef.current = node;
-    if (node && activeCall?.remoteStream) {
-        node.srcObject = activeCall.remoteStream;
-        // Apply mute state if needed
-        node.muted = remoteMuted && !isAdminSpyMode;
-        node.play().catch(console.error);
-    }
-  }, [activeCall?.remoteStream, remoteMuted, isAdminSpyMode]);
-
-  // Force re-attach streams when maximizing if refs are already set but srcObject is missing
-  useEffect(() => {
-    if (!isMinimized && activeCall?.remoteStream) {
-        if (remoteVideoRef.current && !remoteVideoRef.current.srcObject) {
-            remoteVideoRef.current.srcObject = activeCall.remoteStream;
-            remoteVideoRef.current.play().catch(console.error);
-        }
-        if (remoteAudioRef.current && !remoteAudioRef.current.srcObject) {
-            remoteAudioRef.current.srcObject = activeCall.remoteStream;
-            remoteAudioRef.current.play().catch(console.error);
-        }
-    }
-  }, [isMinimized, activeCall?.remoteStream]);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
 
   // Audio Visualization
   const { audioLevel } = useAudioAnalyzer(activeCall?.remoteStream || null);
@@ -132,30 +85,41 @@ export const CallOverlay = () => {
     };
   }, [activeCall?.session.id]); // Re-run only on call ID change
 
-  // Handle Mute logic on remote elements (Reactive updates)
+  // Handle Mute logic on remote elements
   useEffect(() => {
+      // If remote is muted, we mute the element UNLESS we are in Spy Mode
       const shouldMute = remoteMuted && !isAdminSpyMode;
+      
       if (remoteVideoRef.current) remoteVideoRef.current.muted = shouldMute;
       if (remoteAudioRef.current) remoteAudioRef.current.muted = shouldMute;
-  }, [remoteMuted, isAdminSpyMode]);
+      
+  }, [remoteMuted, isAdminSpyMode, activeCall?.remoteStream]);
 
-  // Fallback: Update video refs when streams change (just in case refs are already set)
+  // Update video refs when streams change
   useEffect(() => {
-    if (localVideoRef.current && activeCall?.localStream) {
-      localVideoRef.current.srcObject = activeCall.localStream;
-      localVideoRef.current.muted = true;
+    const videoEl = localVideoRef.current;
+    if (videoEl && activeCall?.localStream) {
+      videoEl.srcObject = activeCall.localStream;
+      // Ensure local video is always muted to prevent echo
+      videoEl.muted = true;
+      videoEl.play().catch(console.error);
     }
-  }, [activeCall?.localStream]);
+  }, [activeCall?.localStream, isMinimized]); // Add isMinimized to force update on maximize
 
   useEffect(() => {
-    if (remoteVideoRef.current && activeCall?.remoteStream) {
-      remoteVideoRef.current.srcObject = activeCall.remoteStream;
+    const videoEl = remoteVideoRef.current;
+    if (videoEl && activeCall?.remoteStream) {
+      videoEl.srcObject = activeCall.remoteStream;
+      videoEl.play().catch(console.error);
     }
-    if (remoteAudioRef.current && activeCall?.remoteStream) {
-      remoteAudioRef.current.srcObject = activeCall.remoteStream;
+    
+    // CORREÇÃO: Anexar stream de áudio se for chamada de voz ou se o vídeo falhar
+    const audioEl = remoteAudioRef.current;
+    if (audioEl && activeCall?.remoteStream) {
+      audioEl.srcObject = activeCall.remoteStream;
+      audioEl.play().catch(console.error);
     }
-  }, [activeCall?.remoteStream]);
-
+  }, [activeCall?.remoteStream, isMinimized]); // Add isMinimized to force update on maximize
 
 
   // Call duration timer
@@ -222,7 +186,7 @@ export const CallOverlay = () => {
           {/* Remote Video (Full Screen) */}
           {isVideoCall && activeCall.remoteStream ? (
             <video
-              ref={setRemoteVideoRef}
+              ref={remoteVideoRef}
               autoPlay
               playsInline
               className="w-full h-full object-cover"
@@ -233,7 +197,7 @@ export const CallOverlay = () => {
                {/* Hidden Audio Element for Voice Calls */}
                {activeCall.remoteStream && (
                  <audio 
-                    ref={setRemoteAudioRef} 
+                    ref={remoteAudioRef} 
                     autoPlay 
                     playsInline 
                     controls={false} 
@@ -312,7 +276,7 @@ export const CallOverlay = () => {
                className="absolute top-4 right-4 w-32 h-48 bg-zinc-900 rounded-2xl overflow-hidden border-2 border-zinc-700/50 shadow-2xl z-20 cursor-move"
              >
                 <video
-                  ref={setLocalVideoRef}
+                  ref={localVideoRef}
                   autoPlay
                   playsInline
                   muted

@@ -169,7 +169,7 @@ export const MessageInput = ({
 
   return (
     <>
-      <div className="bg-background/80 backdrop-blur-md border-t border-border/50 px-4 py-3 safe-bottom">
+      <div className="bg-background/80 backdrop-blur-xl border-t border-white/5 px-4 py-3 safe-bottom transition-all duration-300">
         {/* Error Message */}
         <AnimatePresence>
           {sendingState === "error" && (
@@ -179,7 +179,7 @@ export const MessageInput = ({
               exit={{ opacity: 0, height: 0 }}
               className="mb-2"
             >
-              <p className="text-xs text-destructive text-center">
+              <p className="text-xs text-red-400 text-center font-medium bg-red-500/10 py-1 rounded-md border border-red-500/20">
                 Erro ao enviar. Toque para tentar novamente.
               </p>
             </motion.div>
@@ -198,13 +198,12 @@ export const MessageInput = ({
                 isRecording={isRecording}
                 duration={duration}
                 audioUrl={audioUrl}
-                isSending={isSendingAudio}
-                formatDuration={formatDuration}
                 onStartRecording={handleStartRecording}
                 onStopRecording={stopRecording}
                 onCancelRecording={cancelRecording}
                 onSendAudio={handleSendAudio}
-                disabled={disabled}
+                isSending={isSendingAudio}
+                formatDuration={formatDuration}
               />
             </motion.div>
           ) : (
@@ -213,80 +212,85 @@ export const MessageInput = ({
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
-              className="flex items-center gap-2"
+              className="flex items-end gap-2"
             >
-              <motion.button
-                whileTap={{ scale: 0.9 }}
-                onClick={() => setShowStickerPicker(true)}
-                className="p-2 text-muted-foreground hover:text-primary transition-colors"
-                disabled={disabled}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="shrink-0 rounded-full text-zinc-400 hover:text-white hover:bg-white/10"
+                onClick={() => setShowStickerPicker(!showStickerPicker)}
               >
-                <Sticker className="w-5 h-5" />
-              </motion.button>
-              <button
-                className="p-2 text-muted-foreground hover:text-foreground transition-colors"
-                disabled={disabled}
-              >
-                <ImageIcon className="w-5 h-5" />
-              </button>
+                <Sticker className="w-6 h-6" />
+              </Button>
 
-              <Input
-                value={message}
-                onChange={(e) => handleChange(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Mensagem..."
-                className={cn(
-                  "flex-1 bg-muted/30 transition-all",
-                  sendingState === "error" && "border-destructive/50"
-                )}
-                disabled={disabled || sendingState === "sending"}
-              />
-
-              {message.trim() || sendingState !== "idle" ? (
-                <motion.div
-                  initial={{ scale: 0.8 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 25 }}
-                >
-                  <Button
-                    size="icon"
-                    variant="neon"
-                    onClick={handleSend}
-                    disabled={
-                      (!message.trim() && sendingState === "idle") ||
-                      sendingState === "sending" ||
-                      disabled
-                    }
-                    className={cn("transition-all duration-300", getButtonVariant())}
-                  >
-                    {getButtonContent()}
-                  </Button>
-                </motion.div>
-              ) : (
-                <AudioRecorder
-                  isRecording={false}
-                  duration={0}
-                  audioUrl={null}
-                  isSending={false}
-                  formatDuration={formatDuration}
-                  onStartRecording={handleStartRecording}
-                  onStopRecording={stopRecording}
-                  onCancelRecording={cancelRecording}
-                  onSendAudio={handleSendAudio}
-                  disabled={disabled}
+              <div className="flex-1 bg-zinc-900/50 rounded-2xl border border-white/5 focus-within:border-emerald-500/50 focus-within:bg-zinc-900 transition-all duration-200 flex items-end min-h-[44px]">
+                <Input
+                  value={message}
+                  onChange={(e) => handleChange(e.target.value)}
+                  onKeyDown={handleKeyPress}
+                  placeholder="Mensagem..."
+                  className="border-none bg-transparent focus-visible:ring-0 min-h-[44px] py-3 px-4 resize-none max-h-32 placeholder:text-zinc-500"
+                  disabled={disabled || sendingState === "sending"}
+                  autoComplete="off"
                 />
-              )}
+                
+                <AnimatePresence>
+                   {!message.trim() && (
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        className="mr-1 mb-1"
+                      >
+                         <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-9 w-9 rounded-full text-zinc-400 hover:text-white hover:bg-white/10"
+                            onClick={handleStartRecording}
+                         >
+                            <span className="sr-only">Gravar áudio</span>
+                            <div className="w-5 h-5 rounded-full border-2 border-current flex items-center justify-center">
+                                <div className="w-2 h-2 rounded-full bg-current" />
+                            </div>
+                         </Button>
+                      </motion.div>
+                   )}
+                </AnimatePresence>
+              </div>
+
+              <AnimatePresence mode="popLayout">
+                {message.trim() && (
+                  <motion.div
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                  >
+                    <Button
+                      onClick={handleSend}
+                      disabled={!message.trim() || sendingState === "sending" || disabled}
+                      size="icon"
+                      className={cn(
+                        "rounded-full w-11 h-11 shrink-0 transition-all duration-300 shadow-lg shadow-emerald-500/20",
+                        getButtonVariant(),
+                        !getButtonVariant() && "bg-emerald-500 hover:bg-emerald-600 text-black"
+                      )}
+                    >
+                      {getButtonContent()}
+                    </Button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
 
-      {/* Sticker Picker */}
-      <StickerPicker
-        open={showStickerPicker}
-        onClose={() => setShowStickerPicker(false)}
-        onSelectSticker={handleSendSticker}
-      />
+        <StickerPicker
+          isOpen={showStickerPicker}
+          onClose={() => setShowStickerPicker(false)}
+          onSelect={handleSendSticker}
+        />
+      </div>
     </>
   );
 };

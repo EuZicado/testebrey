@@ -58,14 +58,14 @@ export const NewConversationSheet = ({
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl bg-background border-t border-border shadow-2xl">
+      <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl">
         <SheetHeader className="pb-4">
-          <div className="w-12 h-1.5 bg-muted rounded-full mx-auto mb-4" />
-          <div className="flex items-center justify-between px-2">
-            <SheetTitle className="text-2xl font-bold text-foreground tracking-tight">Nova Mensagem</SheetTitle>
+          <div className="w-10 h-1 bg-muted-foreground/30 rounded-full mx-auto mb-3" />
+          <div className="flex items-center justify-between">
+            <SheetTitle className="text-xl font-bold">Nova Mensagem</SheetTitle>
             <button
               onClick={onClose}
-              className="p-2 rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-foreground border border-transparent hover:border-border"
+              className="p-2 rounded-full hover:bg-muted transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -73,42 +73,39 @@ export const NewConversationSheet = ({
         </SheetHeader>
 
         {/* Search Input */}
-        <div className="relative mb-6 px-2">
-          <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <div className="relative mb-4">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar por nome ou username..."
-            className="pl-12 bg-secondary border-transparent rounded-2xl h-14 text-foreground placeholder:text-muted-foreground focus-visible:ring-primary/50 focus-visible:border-primary/50 text-base shadow-inner"
+            placeholder="Buscar usuários..."
+            className="pl-10 bg-muted/50 border-0 rounded-xl h-12"
             autoFocus
           />
         </div>
 
         {/* Users List */}
-        <div className="flex-1 overflow-y-auto space-y-2 -mx-2 px-4 pb-8">
+        <div className="flex-1 overflow-y-auto space-y-1 -mx-2 px-2">
           {isSearching ? (
-            <div className="flex flex-col items-center justify-center py-20">
-              <Loader2 className="w-10 h-10 animate-spin text-emerald-500 mb-4" />
-              <p className="text-sm text-zinc-400 font-medium">Buscando usuários...</p>
+            <div className="flex flex-col items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary mb-3" />
+              <p className="text-sm text-muted-foreground">Buscando usuários...</p>
             </div>
           ) : !query ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center opacity-80">
-              <div className="w-24 h-24 rounded-full bg-zinc-800/50 flex items-center justify-center mb-6 border border-zinc-700/30">
-                <MessageCircle className="w-12 h-12 text-zinc-500" />
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mb-4">
+                <MessageCircle className="w-10 h-10 text-muted-foreground" />
               </div>
-              <p className="text-zinc-300 font-semibold text-lg">Comece uma conversa</p>
-              <p className="text-sm text-zinc-500 mt-2 max-w-[200px]">
-                Busque por amigos, colegas ou contatos recentes
+              <p className="text-muted-foreground font-medium">Buscar pessoas</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Digite o nome ou @username
               </p>
             </div>
           ) : results.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <div className="w-16 h-16 rounded-full bg-zinc-800/30 flex items-center justify-center mb-4">
-                 <Search className="w-8 h-8 text-zinc-600" />
-              </div>
-              <p className="text-zinc-300 font-medium">Nenhum usuário encontrado</p>
-              <p className="text-sm text-zinc-500 mt-1">
-                Verifique a ortografia ou tente outro termo
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <p className="text-muted-foreground">Nenhum usuário encontrado</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Tente outro nome ou username
               </p>
             </div>
           ) : (
@@ -117,44 +114,40 @@ export const NewConversationSheet = ({
                 key={u.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05, type: "spring", damping: 20, stiffness: 300 }}
+                transition={{ delay: index * 0.03, type: "spring", damping: 25, stiffness: 300 }}
                 onClick={() => handleSelectUser(u)}
                 disabled={selectedUserId !== null || !u.can_message}
-                className={`w-full flex items-center gap-4 p-4 rounded-3xl transition-all border border-transparent ${
+                className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all ${
                   u.can_message 
-                    ? "hover:bg-zinc-800 hover:border-zinc-700/50 active:scale-[0.99] bg-zinc-900/50" 
-                    : "opacity-50 cursor-not-allowed bg-zinc-900/20"
+                    ? "hover:bg-muted/50 active:bg-muted active:scale-[0.98]" 
+                    : "opacity-50 cursor-not-allowed"
                 }`}
               >
-                <Avatar className="w-14 h-14 ring-2 ring-zinc-800 shadow-lg">
+                <Avatar className="w-14 h-14">
                   <AvatarImage src={u.avatar_url || undefined} className="object-cover" />
-                  <AvatarFallback className="bg-gradient-to-br from-zinc-700 to-zinc-900 text-zinc-300 text-lg font-bold">
+                  <AvatarFallback className="bg-secondary text-lg font-semibold">
                     {(u.display_name || u.username || "U")[0].toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
-                <div className="flex-1 text-left min-w-0">
-                  <p className="font-bold flex items-center gap-1.5 text-zinc-100 text-base truncate">
+                <div className="flex-1 text-left">
+                  <p className="font-semibold flex items-center gap-1.5">
                     {u.display_name || u.username || "Usuário"}
                     {u.is_verified && (
-                      <BadgeCheck className="w-4 h-4 text-emerald-500 fill-emerald-500/10" />
+                      <BadgeCheck className="w-4 h-4 text-primary" />
                     )}
                   </p>
-                  <p className="text-sm text-zinc-500 font-medium truncate">
+                  <p className="text-sm text-muted-foreground">
                     @{u.username || "usuario"}
                   </p>
                 </div>
-                {!u.can_message ? (
-                  <div className="flex items-center gap-1.5 text-red-500/70 bg-red-500/10 px-3 py-1 rounded-full">
-                    <Lock className="w-3.5 h-3.5" />
-                    <span className="text-xs font-bold">Bloqueado</span>
+                {!u.can_message && (
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <Lock className="w-4 h-4" />
+                    <span className="text-xs">Bloqueado</span>
                   </div>
-                ) : (
-                    <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <MessageCircle className="w-4 h-4" />
-                    </div>
                 )}
                 {selectedUserId === u.id && (
-                  <Loader2 className="w-5 h-5 animate-spin text-emerald-500 absolute right-4" />
+                  <Loader2 className="w-5 h-5 animate-spin text-primary" />
                 )}
               </motion.button>
             ))

@@ -77,7 +77,7 @@ export const MessageBubble = ({
   if (isSystemMessage) {
     return (
       <div className="flex justify-center my-4 w-full">
-        <div className="flex items-center gap-2 bg-muted/50 border border-border/50 px-4 py-1.5 rounded-full text-xs text-muted-foreground font-medium backdrop-blur-sm">
+        <div className="flex items-center gap-2 bg-muted/30 border border-border/50 px-4 py-1.5 rounded-full text-xs text-muted-foreground font-medium">
           {isMissedCall ? (
             <PhoneOff className="w-3.5 h-3.5 text-destructive/70" />
           ) : (
@@ -102,9 +102,9 @@ export const MessageBubble = ({
         }}
       >
         {!isOwn && showAvatar && (
-          <Avatar className="w-6 h-6 ring-2 ring-zinc-950">
+          <Avatar className="w-6 h-6">
             <AvatarImage src={avatarUrl || undefined} />
-            <AvatarFallback className="text-xs bg-zinc-800 text-zinc-400 font-bold">U</AvatarFallback>
+            <AvatarFallback className="text-xs">U</AvatarFallback>
           </Avatar>
         )}
         {!isOwn && !showAvatar && <div className="w-6" />}
@@ -128,11 +128,11 @@ export const MessageBubble = ({
           {/* Message bubble */}
           <div
             className={cn(
-              "max-w-[75vw] rounded-2xl px-4 py-2 shadow-sm",
+              "max-w-[75vw] rounded-2xl px-4 py-2.5 shadow-sm transition-all duration-200",
               isOwn
-                ? "bg-primary text-primary-foreground rounded-br-sm shadow-primary/20"
-                : "bg-muted text-foreground rounded-bl-sm border border-border/50",
-              hasSticker && "bg-transparent px-0 py-0 shadow-none border-none"
+                ? "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-md shadow-emerald-500/10 rounded-tr-sm"
+                : "bg-zinc-800/80 backdrop-blur-sm border border-white/5 text-zinc-100 shadow-sm rounded-tl-sm",
+              hasSticker && "bg-transparent px-0 py-0 border-none shadow-none"
             )}
           >
             {hasAudio ? (
