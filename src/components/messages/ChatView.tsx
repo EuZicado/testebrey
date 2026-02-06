@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useConversationMessages, useOtherParticipant } from "@/hooks/messages";
@@ -136,24 +136,17 @@ export const ChatView = ({ conversationId, onBack }: ChatViewProps) => {
       />
 
       {/* In-Call Banner */}
-      <AnimatePresence>
-        {isInCallWithUser && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="bg-emerald-950/30 border-b border-emerald-500/20 px-4 py-2 flex items-center justify-center backdrop-blur-md"
-          >
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span className="text-xs font-medium text-emerald-400 tracking-wide uppercase">Chamada em andamento</span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {isInCallWithUser && (
+        <div className="bg-emerald-950/30 border-b border-emerald-500/20 px-4 py-2 flex items-center justify-center backdrop-blur-md">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="text-xs font-medium text-emerald-400 tracking-wide uppercase">Chamada em andamento</span>
+          </div>
+        </div>
+      )}
 
       {/* Messages Area */}
       <div
