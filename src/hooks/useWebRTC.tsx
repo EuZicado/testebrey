@@ -292,18 +292,11 @@ export const useWebRTC = () => {
       }, 2000);
   }, []);
 
-  // Cria RTCPeerConnection com transceivers para forçar áudio bidirecional
+  // Cria RTCPeerConnection (Transceivers removidos para evitar conflito com addTrack)
   const createPeerConnection = useCallback((callId: string, type: CallType) => {
-    console.log("🔗 Criando RTCPeerConnection (Advanced)...");
+    console.log("🔗 Criando RTCPeerConnection...");
     const connection = new RTCPeerConnection(ICE_SERVERS);
     pc.current = connection;
-
-    // CRÍTICO: Usar transceivers para garantir áudio sendrecv (resolve PC mudo)
-    connection.addTransceiver('audio', { direction: 'sendrecv' });
-    
-    if (type === 'video') {
-      connection.addTransceiver('video', { direction: 'sendrecv' });
-    }
 
     // Monitorar estado da conexão ICE
     connection.oniceconnectionstatechange = () => {
@@ -332,9 +325,12 @@ export const useWebRTC = () => {
     };
 
     connection.ontrack = (event) => {
-      console.log("📥 Track remoto recebido:", event.track.kind);
+      console.log(`📥 Track remoto recebido: ${event.track.kind}, ID: ${event.track.id}`);
+      event.track.onunmute = () => console.log(`🔊 Track ${event.track.kind} unmuted`);
+      
       const [remoteStream] = event.streams;
       if (remoteStream) {
+          console.log("🌊 Stream remoto detectado com tracks:", remoteStream.getTracks().map(t => t.kind));
           remoteStreamRef.current = remoteStream;
           setActiveCall(prev => prev ? { ...prev, remoteStream } : null);
       }
@@ -531,6 +527,7 @@ export const useWebRTC = () => {
       // 3. Inicializar PeerConnection
       const connection = createPeerConnection(session.id, callType);
       
+      console.log("📤 Adicionando tracks locais ao PC...");
       stream.getTracks().forEach(track => {
           connection.addTrack(track, stream);
       });
@@ -553,17 +550,27 @@ export const useWebRTC = () => {
       // 6. Atualizar status para ringing
       await supabase.from('call_sessions').update({ status: 'ringing' }).eq('id', session.id);
 
+      // CORREÇÃO: Usar calleeInfo se disponível, senão buscar do perfil
+      let otherParticipant: CallParticipant | null = null;
+      if (calleeInfo) {
+          otherParticipant = {
+            id: calleeId,
+            display_name: calleeInfo.displayName,
+            username: calleeInfo.username,
+            avatar_url: calleeInfo.avatarUrl,
+        } as CallParticipant;
+      } else {
+          // Fallback: Tentar buscar perfil se não foi passado (raro, mas possível)
+          const { data: profile } = await supabase.from('profiles').select('*').eq('id', calleeId).single();
+          if (profile) otherParticipant = profile as CallParticipant;
+      }
+
       setActiveCall({
         session: session as CallSession,
         localStream: stream,
         remoteStream: null,
         isScreenSharing: false,
-        otherParticipant: calleeInfo ? {
-            id: calleeId,
-            display_name: calleeInfo.displayName,
-            username: calleeInfo.username,
-            avatar_url: calleeInfo.avatarUrl,
-        } as CallParticipant : null,
+        otherParticipant: otherParticipant,
         screenStream: null,
         isAudioEnabled: true,
         isVideoEnabled: callType === 'video',
@@ -619,8 +626,12 @@ export const useWebRTC = () => {
 
         // 2. Criar PC
         const connection = createPeerConnection(callId, callType);
-        stream.getTracks().forEach(track => connection.addTrack(track, stream));
-
+        // stream.getTracks().forEach(track => connection.addTrack(track, stream)); // REMOVIDO DAQUI, movido para após setRemoteDescription? NÃO.
+        // O padrão correto é AddTracks -> SetRemoteDesc -> CreateAnswer.
+        // Mas espere, se eu fizer AddTracks ANTES do SetRemoteDesc, o navegador cria transceivers novos.
+        // Se eu fizer DEPOIS do SetRemoteDesc, o navegador usa os transceivers criados pelo Offer.
+        // VAMOS MANTER DEPOIS do SetRemoteDesc para reutilizar transceivers do Offer (mais seguro para WebRTC moderno).
+        
         // 3. Buscar Offer
         const { data: signals } = await supabase
             .from('call_signals')
@@ -633,16 +644,26 @@ export const useWebRTC = () => {
         if (!signals || signals.length === 0) throw new Error("Oferta não encontrada");
         const offerSignal = signals[0];
 
-        // 4. Set Remote Description
+        // 4. Set Remote Description (Processa Offer)
         await connection.setRemoteDescription(new RTCSessionDescription(offerSignal.signal_data as RTCSessionDescriptionInit));
         isDescriptionSet.current = true;
         await processIceQueue();
 
-        // 5. Criar Answer
+        // 5. Adicionar Tracks (Depois do RemoteDescription para garantir transceivers corretos ou antes?)
+        // Spec recomenda adicionar tracks antes de createAnswer. Se transceivers foram criados pelo setRemoteDescription (Offer),
+        // addTrack deve reutilizá-los se possível.
+        // Vamos garantir que todos os tracks locais sejam enviados.
+        
+        console.log("📤 Adicionando tracks locais ao PC de resposta...");
+        stream.getTracks().forEach(track => {
+            connection.addTrack(track, stream);
+        });
+
+        // 6. Criar Answer
         const answer = await connection.createAnswer();
         await connection.setLocalDescription(answer);
 
-        // 6. Enviar Answer
+        // 7. Enviar Answer
         await supabase.from('call_signals').insert({
             call_id: callId,
             sender_id: user.id,
