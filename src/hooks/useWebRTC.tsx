@@ -432,18 +432,46 @@ export const useWebRTC = () => {
   }, [incomingCall, user, getUserMedia, createPeerConnection, cleanup, subscribeToSignals, processIceQueue]);
 
   const declineCall = useCallback(async () => {
-      if (!incomingCall) return;
-      await supabase.from('call_sessions').update({ status: 'rejected' }).eq('id', incomingCall.session.id);
+      if (!incomingCall || !user) return;
+      
+      const conversationId = incomingCall.session.conversation_id;
+      
+      await supabase.from('call_sessions').update({ status: 'declined' }).eq('id', incomingCall.session.id);
+      
+      // System message for declined call
+      await supabase.from('messages').insert({
+        conversation_id: conversationId,
+        sender_id: user.id,
+        content: "📞 Chamada recusada"
+      });
+
       setIncomingCall(null);
-  }, [incomingCall]);
+  }, [incomingCall, user]);
 
   const endCall = useCallback(async () => {
-      if (activeCall) {
-          await supabase.from('call_sessions').update({ status: 'ended', ended_at: new Date().toISOString() }).eq('id', activeCall.session.id);
+      if (activeCall && user) {
+          let status = 'ended';
+          // If call was not connected yet, it's a missed call (if caller hangs up)
+          // or just ended if connected.
+          // Note: If I am the caller and I hang up while ringing, it is a missed call for the other person.
+          if (activeCall.session.status === 'initiating' || activeCall.session.status === 'ringing') {
+             status = 'missed';
+          }
+
+          await supabase.from('call_sessions').update({ status: status as any, ended_at: new Date().toISOString() }).eq('id', activeCall.session.id);
+          
+          if (status === 'missed') {
+             await supabase.from('messages').insert({
+                conversation_id: activeCall.session.conversation_id,
+                sender_id: user.id,
+                content: "📞 Chamada perdida"
+             });
+          }
+
           // Enviar sinal de hangup para garantir
           await supabase.from('call_signals').insert({
               call_id: activeCall.session.id,
-              sender_id: user!.id,
+              sender_id: user.id,
               signal_type: 'hangup',
               signal_data: {}
           });

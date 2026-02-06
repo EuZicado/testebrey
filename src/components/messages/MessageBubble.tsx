@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, CheckCheck } from "lucide-react";
+import { Check, CheckCheck, PhoneOff } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AudioMessage } from "./AudioMessage";
 import { ReactionType, ReactionCount } from "@/hooks/useMessageReactions";
@@ -58,8 +58,14 @@ export const MessageBubble = ({
   const hasAudio = !!audioUrl;
   const hasSticker = !!stickerUrl;
   const hasTextContent = !!content && content.trim().length > 0;
+  
+  // System Message Detection
+  const isMissedCall = content === "📞 Chamada perdida";
+  const isDeclinedCall = content === "📞 Chamada recusada";
+  const isSystemMessage = isMissedCall || isDeclinedCall;
 
   const handleLongPress = () => {
+    if (isSystemMessage) return;
     setShowReactionPicker(true);
   };
 
@@ -67,6 +73,22 @@ export const MessageBubble = ({
     onToggleReaction?.(messageId, type);
     setShowReactionPicker(false);
   };
+
+  if (isSystemMessage) {
+    return (
+      <div className="flex justify-center my-4 w-full">
+        <div className="flex items-center gap-2 bg-muted/30 border border-border/50 px-4 py-1.5 rounded-full text-xs text-muted-foreground font-medium">
+          {isMissedCall ? (
+            <PhoneOff className="w-3.5 h-3.5 text-destructive/70" />
+          ) : (
+             <PhoneOff className="w-3.5 h-3.5 text-muted-foreground" />
+          )}
+          <span>{content}</span>
+          <span className="text-[10px] opacity-70 ml-1">• {formatTime(timestamp)}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative group">
