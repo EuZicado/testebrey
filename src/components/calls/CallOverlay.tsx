@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Mic, 
@@ -95,26 +95,31 @@ export const CallOverlay = () => {
       
   }, [remoteMuted, isAdminSpyMode, activeCall?.remoteStream]);
 
-  // Update video refs when streams change
-  useEffect(() => {
-    if (localVideoRef.current && activeCall?.localStream) {
-      localVideoRef.current.srcObject = activeCall.localStream;
-      localVideoRef.current.muted = true;
-      localVideoRef.current.play().catch(e => console.log("Error playing local video:", e));
+  // Callback refs for media elements to handle mounting/unmounting correctly
+  const setLocalVideoRef = useCallback((node: HTMLVideoElement | null) => {
+    localVideoRef.current = node;
+    if (node && activeCall?.localStream) {
+      node.srcObject = activeCall.localStream;
+      node.muted = true;
+      node.play().catch(e => console.log("Error playing local video:", e));
     }
-  }, [activeCall?.localStream, isMinimized]); 
+  }, [activeCall?.localStream]);
 
-  useEffect(() => {
-    if (remoteVideoRef.current && activeCall?.remoteStream) {
-      remoteVideoRef.current.srcObject = activeCall.remoteStream;
-      remoteVideoRef.current.play().catch(e => console.log("Error playing remote video:", e));
+  const setRemoteVideoRef = useCallback((node: HTMLVideoElement | null) => {
+    remoteVideoRef.current = node;
+    if (node && activeCall?.remoteStream) {
+      node.srcObject = activeCall.remoteStream;
+      node.play().catch(e => console.log("Error playing remote video:", e));
     }
-    
-    if (remoteAudioRef.current && activeCall?.remoteStream) {
-      remoteAudioRef.current.srcObject = activeCall.remoteStream;
-      remoteAudioRef.current.play().catch(e => console.log("Error playing remote audio:", e));
+  }, [activeCall?.remoteStream]);
+
+  const setRemoteAudioRef = useCallback((node: HTMLAudioElement | null) => {
+    remoteAudioRef.current = node;
+    if (node && activeCall?.remoteStream) {
+      node.srcObject = activeCall.remoteStream;
+      node.play().catch(e => console.log("Error playing remote audio:", e));
     }
-  }, [activeCall?.remoteStream, isMinimized]);
+  }, [activeCall?.remoteStream]);
 
 
   // Call duration timer
@@ -178,21 +183,34 @@ export const CallOverlay = () => {
           {/* Background Effects */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/20 to-black/80 z-10 pointer-events-none" />
 
-          {/* Remote Video (Full Screen) */}
+          {/* Remote Video (Full Screen) OR Local Video (Background during call setup) */}
           {isVideoCall && activeCall.remoteStream ? (
             <video
-              ref={remoteVideoRef}
+              ref={setRemoteVideoRef}
               autoPlay
               playsInline
               className="w-full h-full object-cover"
             />
-          ) : (
-             // Avatar Display when no video
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900">
+          ) : isVideoCall && activeCall.localStream ? (
+            <video
+              ref={setLocalVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover transform -scale-x-100" 
+            />
+          ) : null}
+
+          {/* Avatar & Status Overlay */}
+          {(!isVideoCall || !activeCall.remoteStream) && (
+            <div className={cn(
+              "absolute inset-0 flex flex-col items-center justify-center",
+              (isVideoCall && activeCall.localStream) ? "bg-black/40 backdrop-blur-sm" : "bg-zinc-900"
+            )}>
                {/* Hidden Audio Element for Voice Calls */}
                {activeCall.remoteStream && (
                  <audio 
-                    ref={remoteAudioRef} 
+                    ref={setRemoteAudioRef} 
                     autoPlay 
                     playsInline 
                     controls={false} 
@@ -262,7 +280,7 @@ export const CallOverlay = () => {
           )}
 
           {/* Local Video (PiP) */}
-          {isVideoCall && activeCall.localStream && (
+          {isVideoCall && activeCall.localStream && activeCall.remoteStream && (
              <motion.div 
                drag
                dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
@@ -271,11 +289,11 @@ export const CallOverlay = () => {
                className="absolute top-4 right-4 w-32 h-48 bg-zinc-900 rounded-2xl overflow-hidden border-2 border-zinc-700/50 shadow-2xl z-20 cursor-move"
              >
                 <video
-                  ref={localVideoRef}
+                  ref={setLocalVideoRef}
                   autoPlay
                   playsInline
                   muted
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover transform -scale-x-100"
                 />
              </motion.div>
           )}
