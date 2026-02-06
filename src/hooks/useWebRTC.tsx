@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { ActiveCall, IncomingCall, ICE_SERVERS, CallType, CallMessage, CallStats, ConnectionQuality } from "@/types/calls";
+import { ActiveCall, IncomingCall, ICE_SERVERS, CallType, CallMessage, CallStats, ConnectionQuality, CallSession, CallParticipant, CallSignal } from "@/types/calls";
 import { toast } from "sonner";
 
 export const useWebRTC = () => {
@@ -19,6 +19,43 @@ export const useWebRTC = () => {
   const isDescriptionSet = useRef(false);
   const callChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Escutar chamadas recebidas
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase.channel('incoming_calls')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'call_sessions',
+        filter: `callee_id=eq.${user.id}`
+      }, async (payload) => {
+        const session = payload.new as CallSession;
+        if (session.status === 'initiating' || session.status === 'ringing') {
+          // Buscar dados do chamador
+          const { data: caller } = await supabase
+            .from('profiles')
+            .select('id, username, display_name, avatar_url')
+            .eq('id', session.caller_id)
+            .single();
+
+          if (caller) {
+            setIncomingCall({
+              session,
+              caller: caller as CallParticipant
+            });
+            
+            // Tocar som (será tratado pelo CallContext)
+          }
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   // Cleanup completo - libera câmera/microfone
   const cleanup = useCallback(async () => {
@@ -60,20 +97,17 @@ export const useWebRTC = () => {
     setCallMessages([]);
   }, []);
 
-  // getUserMedia com constraints adaptativas para mobile
+  // getUserMedia com constraints adaptativas e fallback
   const getUserMedia = useCallback(async (type: CallType) => {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     
-    const constraints: MediaStreamConstraints = {
+    // Tentativa 1: Qualidade Ideal
+    const idealConstraints: MediaStreamConstraints = {
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
-        // Bitrate otimizado para redes móveis
-        ...(isMobile && { 
-          sampleRate: 16000, 
-          channelCount: 1,
-        })
+        ...(isMobile && { sampleRate: 16000, channelCount: 1 })
       },
       video: type === 'video' ? {
         width: { ideal: isMobile ? 480 : 1280 },
@@ -82,15 +116,65 @@ export const useWebRTC = () => {
         facingMode: "user"
       } : false
     };
+
+    // Tentativa 2: Fallback (Baixa qualidade ou Sem Vídeo se falhar)
+    const fallbackConstraints: MediaStreamConstraints = {
+        audio: true,
+        video: type === 'video' ? {
+            width: { ideal: 320 },
+            height: { ideal: 240 },
+            frameRate: { ideal: 15 },
+            facingMode: "user"
+        } : false
+    };
     
-    console.log("📹 Solicitando mídia com constraints:", constraints);
+    console.log("📹 Solicitando mídia...");
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      localStreamRef.current = stream;
-      return stream;
+      try {
+         const stream = await navigator.mediaDevices.getUserMedia(idealConstraints);
+         localStreamRef.current = stream;
+         return stream;
+      } catch (err) {
+         console.warn("⚠️ Falha ao obter mídia com qualidade ideal:", err);
+         
+         // Tentativa 2: Fallback com qualidade reduzida
+         try {
+             console.log("🔄 Tentando fallback com qualidade reduzida...");
+             const stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+             localStreamRef.current = stream;
+             return stream;
+         } catch (fallbackErr) {
+             console.warn("⚠️ Falha no fallback de vídeo:", fallbackErr);
+             
+             // Tentativa 3: Audio Only (se era vídeo)
+             if (type === 'video') {
+                 console.log("🔄 Tentando fallback para Áudio Apenas...");
+                 try {
+                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                     localStreamRef.current = stream;
+                     toast.warning("Não foi possível acessar a câmera. Iniciando apenas com áudio.");
+                     return stream;
+                 } catch (audioErr) {
+                     throw audioErr; // Se nem áudio funcionar, desiste
+                 }
+             }
+             throw fallbackErr;
+         }
+      }
     } catch (error) {
-      console.error("Erro ao acessar mídia:", error);
-      toast.error("Não foi possível acessar câmera/microfone. Verifique as permissões.");
+      console.error("Erro fatal ao acessar mídia:", error);
+      
+      const err = error as Error;
+      if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+          toast.error("Câmera/Microfone indisponíveis. Verifique se outro app está usando.");
+      } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          toast.error("Permissão negada. Ative o acesso à câmera/microfone.");
+      } else if (err.name === 'NotFoundError') {
+          toast.error("Dispositivo não encontrado.");
+      } else {
+          toast.error("Erro ao acessar dispositivos de mídia.");
+      }
       throw error;
     }
   }, []);
@@ -114,6 +198,9 @@ export const useWebRTC = () => {
     }
   }, []);
 
+  const prevBytesRef = useRef<number>(0);
+  const prevTimestampRef = useRef<number>(0);
+
   // Monitoramento de Qualidade e Stats
   const startStatsMonitoring = useCallback(() => {
       if (statsIntervalRef.current) clearInterval(statsIntervalRef.current);
@@ -125,6 +212,7 @@ export const useWebRTC = () => {
               const stats = await pc.current.getStats();
               let packetLoss = 0;
               let roundTripTime = 0;
+              let currentBytes = 0;
               let bitrate = 0;
 
               stats.forEach(report => {
@@ -133,8 +221,21 @@ export const useWebRTC = () => {
                   }
                   if (report.type === 'inbound-rtp' && report.kind === 'audio') {
                       packetLoss = report.packetsLost;
+                      currentBytes = report.bytesReceived;
                   }
               });
+
+              // Calculate bitrate
+              const now = Date.now();
+              if (prevTimestampRef.current > 0) {
+                  const timeDiff = now - prevTimestampRef.current;
+                  if (timeDiff > 0) {
+                      const bytesDiff = currentBytes - prevBytesRef.current;
+                      bitrate = (bytesDiff * 8) / (timeDiff / 1000); // bits per second
+                  }
+              }
+              prevBytesRef.current = currentBytes;
+              prevTimestampRef.current = now;
 
               // Atualiza UI com qualidade
               let quality: 'good' | 'poor' | 'bad' = 'good';
@@ -147,7 +248,7 @@ export const useWebRTC = () => {
                   ...prev,
                   connectionQuality: {
                       rating: quality === 'good' ? 'excellent' : quality === 'poor' ? 'fair' : 'poor',
-                      bitrate,
+                      bitrate: Math.round(bitrate),
                       packetLoss,
                       latency: roundTripTime,
                       jitter: 0
@@ -192,7 +293,7 @@ export const useWebRTC = () => {
           call_id: callId,
           sender_id: user.id,
           signal_type: 'ice-candidate',
-          signal_data: event.candidate.toJSON() as any
+          signal_data: event.candidate.toJSON()
         }).then(({ error }) => {
             if (error) console.error("Erro ao enviar ICE:", error);
         });
@@ -268,7 +369,7 @@ export const useWebRTC = () => {
                 call_id: callId,
                 sender_id: user!.id,
                 signal_type: 'answer',
-                signal_data: answer as any
+                signal_data: answer as unknown as Record<string, unknown>
              });
              await processIceQueue();
           }
@@ -348,7 +449,7 @@ export const useWebRTC = () => {
   }, []);
 
   // Função para iniciar chamada
-  const startCall = useCallback(async (conversationId: string, calleeId: string, callType: CallType) => {
+  const startCall = useCallback(async (conversationId: string, calleeId: string, callType: CallType, calleeInfo?: { displayName: string, username: string, avatarUrl: string }) => {
     if (!user) {
         toast.error("Você precisa estar logado para fazer chamadas.");
         return;
@@ -407,18 +508,23 @@ export const useWebRTC = () => {
         call_id: session.id,
         sender_id: user.id,
         signal_type: 'offer',
-        signal_data: offer as any
+        signal_data: offer as unknown as Record<string, unknown>
       });
 
       // 6. Atualizar status para ringing
       await supabase.from('call_sessions').update({ status: 'ringing' }).eq('id', session.id);
 
       setActiveCall({
-        session: session as any,
+        session: session as CallSession,
         localStream: stream,
         remoteStream: null,
         isScreenSharing: false,
-        otherParticipant: null,
+        otherParticipant: calleeInfo ? {
+            id: calleeId,
+            display_name: calleeInfo.displayName,
+            username: calleeInfo.username,
+            avatar_url: calleeInfo.avatarUrl,
+        } as CallParticipant : null,
         screenStream: null,
         isAudioEnabled: true,
         isVideoEnabled: callType === 'video',
@@ -443,21 +549,22 @@ export const useWebRTC = () => {
           }
       }, 45000);
 
-    } catch (e: any) {
+    } catch (e) {
       console.error("Erro ao iniciar chamada:", e);
       cleanup();
       
-      if (e?.code === 'PGRST116') {
+      const error = e as any;
+      if (error?.code === 'PGRST116') {
          toast.error("Erro de permissão ou dados inválidos ao criar chamada.");
-      } else if (e?.name === 'NotAllowedError' || e?.name === 'PermissionDeniedError') {
+      } else if (error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError') {
          toast.error("Permissão de câmera/microfone negada.");
-      } else if (e?.name === 'NotFoundError') {
+      } else if (error?.name === 'NotFoundError') {
          toast.error("Dispositivo de câmera/microfone não encontrado.");
       } else {
-         toast.error(`Erro ao iniciar chamada: ${e.message || 'Erro desconhecido'}`);
+         toast.error(`Erro ao iniciar chamada: ${error.message || 'Erro desconhecido'}`);
       }
     }
-  }, [user, getUserMedia, createPeerConnection, cleanup, subscribeToSignals]);
+  }, [user, getUserMedia, createPeerConnection, cleanup, subscribeToSignals, checkPermissions]);
 
   // Função para atender chamada
   const answerCall = useCallback(async () => {
@@ -488,7 +595,7 @@ export const useWebRTC = () => {
         const offerSignal = signals[0];
 
         // 4. Set Remote Description
-        await connection.setRemoteDescription(new RTCSessionDescription(offerSignal.signal_data as any));
+        await connection.setRemoteDescription(new RTCSessionDescription(offerSignal.signal_data as RTCSessionDescriptionInit));
         isDescriptionSet.current = true;
         await processIceQueue();
 
@@ -501,7 +608,7 @@ export const useWebRTC = () => {
             call_id: callId,
             sender_id: user.id,
             signal_type: 'answer',
-            signal_data: answer as any
+            signal_data: answer as unknown as Record<string, unknown>
         });
 
         // 7. Atualizar status
@@ -553,7 +660,7 @@ export const useWebRTC = () => {
              status = 'missed';
           }
 
-          await supabase.from('call_sessions').update({ status: status as any, ended_at: new Date().toISOString() }).eq('id', activeCall.session.id);
+          await supabase.from('call_sessions').update({ status: status, ended_at: new Date().toISOString() }).eq('id', activeCall.session.id);
           
           if (status === 'missed') {
              await supabase.from('messages').insert({

@@ -21,7 +21,7 @@ export interface CallStats {
   frameRate?: number;
 }
 
-export type CallStatus = 'pending' | 'initiating' | 'ringing' | 'connected' | 'ended' | 'missed' | 'declined' | 'rejected';
+export type CallStatus = 'pending' | 'initiating' | 'ringing' | 'connected' | 'ended' | 'missed' | 'declined' | 'rejected' | 'busy';
 export type CallType = 'audio' | 'video';
 export type SignalType = 'offer' | 'answer' | 'ice-candidate' | 'hangup' | 'screen-share-start' | 'screen-share-stop';
 
