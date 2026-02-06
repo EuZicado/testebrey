@@ -58,14 +58,14 @@ export const NewConversationSheet = ({
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl bg-zinc-900 border-t border-zinc-700 shadow-2xl shadow-black">
+      <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl bg-background border-t border-border shadow-2xl">
         <SheetHeader className="pb-4">
-          <div className="w-12 h-1.5 bg-zinc-700/50 rounded-full mx-auto mb-4" />
+          <div className="w-12 h-1.5 bg-muted rounded-full mx-auto mb-4" />
           <div className="flex items-center justify-between px-2">
-            <SheetTitle className="text-2xl font-bold text-white tracking-tight">Nova Mensagem</SheetTitle>
+            <SheetTitle className="text-2xl font-bold text-foreground tracking-tight">Nova Mensagem</SheetTitle>
             <button
               onClick={onClose}
-              className="p-2 rounded-full hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-white border border-transparent hover:border-zinc-700"
+              className="p-2 rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-foreground border border-transparent hover:border-border"
             >
               <X className="w-5 h-5" />
             </button>
@@ -74,12 +74,12 @@ export const NewConversationSheet = ({
 
         {/* Search Input */}
         <div className="relative mb-6 px-2">
-          <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+          <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar por nome ou username..."
-            className="pl-12 bg-zinc-950/50 border-zinc-800 rounded-2xl h-14 text-white placeholder:text-zinc-500 focus-visible:ring-emerald-500/50 focus-visible:border-emerald-500/50 text-base shadow-inner"
+            className="pl-12 bg-secondary border-transparent rounded-2xl h-14 text-foreground placeholder:text-muted-foreground focus-visible:ring-primary/50 focus-visible:border-primary/50 text-base shadow-inner"
             autoFocus
           />
         </div>

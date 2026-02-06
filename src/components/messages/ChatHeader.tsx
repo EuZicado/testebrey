@@ -71,20 +71,20 @@ export const ChatHeader = ({
   };
 
   return (
-    <header className="bg-zinc-900/80 backdrop-blur-md border-b border-zinc-800 px-4 py-3 safe-top">
+    <header className="bg-background/80 backdrop-blur-md border-b border-border px-4 py-3 safe-top">
       <div className="flex items-center gap-3">
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={onBack}
-          className="p-2 -ml-2 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+          className="p-2 -ml-2 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
         </motion.button>
         
         <div className="relative">
-          <Avatar className="w-10 h-10 ring-2 ring-zinc-950">
+          <Avatar className="w-10 h-10 ring-2 ring-background">
             <AvatarImage src={avatarUrl || undefined} className="object-cover" />
-            <AvatarFallback className="bg-zinc-800 text-zinc-400 font-bold">
+            <AvatarFallback className="bg-muted text-muted-foreground font-bold">
               {(displayName || "U")[0].toUpperCase()}
             </AvatarFallback>
           </Avatar>

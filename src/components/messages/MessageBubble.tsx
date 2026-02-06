@@ -77,11 +77,11 @@ export const MessageBubble = ({
   if (isSystemMessage) {
     return (
       <div className="flex justify-center my-4 w-full">
-        <div className="flex items-center gap-2 bg-zinc-900/50 border border-zinc-800 px-4 py-1.5 rounded-full text-xs text-zinc-400 font-medium backdrop-blur-sm">
+        <div className="flex items-center gap-2 bg-muted/50 border border-border/50 px-4 py-1.5 rounded-full text-xs text-muted-foreground font-medium backdrop-blur-sm">
           {isMissedCall ? (
-            <PhoneOff className="w-3.5 h-3.5 text-red-500/70" />
+            <PhoneOff className="w-3.5 h-3.5 text-destructive/70" />
           ) : (
-             <PhoneOff className="w-3.5 h-3.5 text-zinc-500" />
+             <PhoneOff className="w-3.5 h-3.5 text-muted-foreground" />
           )}
           <span>{content}</span>
           <span className="text-[10px] opacity-70 ml-1">• {formatTime(timestamp)}</span>
@@ -130,8 +130,8 @@ export const MessageBubble = ({
             className={cn(
               "max-w-[75vw] rounded-2xl px-4 py-2 shadow-sm",
               isOwn
-                ? "bg-emerald-600 text-white rounded-br-sm shadow-emerald-900/20"
-                : "bg-zinc-800 text-zinc-100 rounded-bl-sm border border-zinc-700/50",
+                ? "bg-primary text-primary-foreground rounded-br-sm shadow-primary/20"
+                : "bg-muted text-foreground rounded-bl-sm border border-border/50",
               hasSticker && "bg-transparent px-0 py-0 shadow-none border-none"
             )}
           >

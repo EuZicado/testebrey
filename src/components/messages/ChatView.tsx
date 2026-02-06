@@ -145,7 +145,7 @@ export const ChatView = ({ conversationId, onBack }: ChatViewProps) => {
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-4 bg-zinc-950 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900/20 via-zinc-950 to-zinc-950 scroll-smooth"
+        className="flex-1 overflow-y-auto px-4 py-4 bg-background scroll-smooth"
       >
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center px-8 opacity-60">
@@ -223,7 +223,7 @@ export const ChatView = ({ conversationId, onBack }: ChatViewProps) => {
                     className="w-6 h-6 rounded-full object-cover ring-2 ring-background"
                   />
                 )}
-                <div className="bg-zinc-900 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm border border-zinc-800">
+                <div className="bg-muted rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm border border-border/50">
                   <TypingIndicator />
                 </div>
               </motion.div>
