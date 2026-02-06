@@ -95,24 +95,53 @@ export const CallOverlay = () => {
       
   }, [remoteMuted, isAdminSpyMode, activeCall?.remoteStream]);
 
-  // Update video refs when streams change
+  // Use callback refs to handle stream attachment immediately on mount
+  const setLocalVideoRef = (node: HTMLVideoElement | null) => {
+    localVideoRef.current = node;
+    if (node && activeCall?.localStream) {
+      node.srcObject = activeCall.localStream;
+      node.muted = true;
+    }
+  };
+
+  const setRemoteVideoRef = (node: HTMLVideoElement | null) => {
+    remoteVideoRef.current = node;
+    if (node && activeCall?.remoteStream) {
+      node.srcObject = activeCall.remoteStream;
+      // Apply mute state if needed
+      if (remoteMuted && !isAdminSpyMode) {
+        node.muted = true;
+      }
+    }
+  };
+
+  // Keep track of audio element for voice calls
+  const setRemoteAudioRef = (node: HTMLAudioElement | null) => {
+    remoteAudioRef.current = node;
+    if (node && activeCall?.remoteStream) {
+      node.srcObject = activeCall.remoteStream;
+       // Apply mute state if needed
+      if (remoteMuted && !isAdminSpyMode) {
+        node.muted = true;
+      }
+    }
+  };
+
+  // Re-attach streams when activeCall changes (redundancy for safety)
   useEffect(() => {
     if (localVideoRef.current && activeCall?.localStream) {
       localVideoRef.current.srcObject = activeCall.localStream;
-      // Ensure local video is always muted to prevent echo
-      localVideoRef.current.muted = true;
     }
-  }, [activeCall?.localStream, isMinimized]); // Add isMinimized to force update on maximize
+  }, [activeCall?.localStream]);
 
   useEffect(() => {
     if (remoteVideoRef.current && activeCall?.remoteStream) {
       remoteVideoRef.current.srcObject = activeCall.remoteStream;
     }
-    // CORREÇÃO: Anexar stream de áudio se for chamada de voz
     if (remoteAudioRef.current && activeCall?.remoteStream) {
       remoteAudioRef.current.srcObject = activeCall.remoteStream;
     }
-  }, [activeCall?.remoteStream, isMinimized]); // Add isMinimized to force update on maximize
+  }, [activeCall?.remoteStream]);
 
 
   // Call duration timer
@@ -179,7 +208,7 @@ export const CallOverlay = () => {
           {/* Remote Video (Full Screen) */}
           {isVideoCall && activeCall.remoteStream ? (
             <video
-              ref={remoteVideoRef}
+              ref={setRemoteVideoRef}
               autoPlay
               playsInline
               className="w-full h-full object-cover"
@@ -190,7 +219,7 @@ export const CallOverlay = () => {
                {/* Hidden Audio Element for Voice Calls */}
                {activeCall.remoteStream && (
                  <audio 
-                    ref={remoteAudioRef} 
+                    ref={setRemoteAudioRef} 
                     autoPlay 
                     playsInline 
                     controls={false} 
@@ -269,7 +298,7 @@ export const CallOverlay = () => {
                className="absolute top-4 right-4 w-32 h-48 bg-zinc-900 rounded-2xl overflow-hidden border-2 border-zinc-700/50 shadow-2xl z-20 cursor-move"
              >
                 <video
-                  ref={localVideoRef}
+                  ref={setLocalVideoRef}
                   autoPlay
                   playsInline
                   muted
