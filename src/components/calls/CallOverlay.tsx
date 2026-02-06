@@ -10,7 +10,11 @@ import {
   MessageSquare,
   Minimize2,
   SwitchCamera,
-  Signal
+  Signal,
+  Wifi,
+  WifiOff,
+  Activity,
+  Info
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -18,6 +22,9 @@ import { useCall } from "@/contexts/CallContext";
 import { cn } from "@/lib/utils";
 import { CallChat } from "./CallChat";
 import { MinimizedCall } from "./MinimizedCall";
+import { useAudioAnalyzer } from "@/hooks/useAudioAnalyzer";
+import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 export const CallOverlay = () => {
   const { 
@@ -28,7 +35,7 @@ export const CallOverlay = () => {
     toggleScreenShare,
     switchCamera,
     isConnecting,
-    connectionQuality
+    connectionQuality: simpleQuality
   } = useCall();
   
   const [showChat, setShowChat] = useState(false);
@@ -39,6 +46,9 @@ export const CallOverlay = () => {
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+
+  // Audio Visualization
+  const { audioLevel } = useAudioAnalyzer(activeCall?.remoteStream || null);
 
   // Update video refs when streams change
   useEffect(() => {
@@ -53,7 +63,7 @@ export const CallOverlay = () => {
     }
   }, [activeCall?.remoteStream]);
 
-  // Call duration timer - starts only after connected
+  // Call duration timer
   useEffect(() => {
     if (activeCall?.session.status === 'connected') {
       const interval = setInterval(() => {
@@ -106,11 +116,14 @@ export const CallOverlay = () => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[100] bg-zinc-950 flex flex-col"
+        className="fixed inset-0 z-[100] bg-zinc-950 flex flex-col font-sans"
       >
         {/* Main Content Area */}
         <div className="relative flex-1 w-full overflow-hidden">
           
+          {/* Background Effects */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/20 to-black/80 z-10 pointer-events-none" />
+
           {/* Remote Video (Full Screen) */}
           {isVideoCall && activeCall.remoteStream ? (
             <video
@@ -121,14 +134,26 @@ export const CallOverlay = () => {
             />
           ) : (
              // Avatar Display when no video
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-zinc-900 to-black">
-               {/* Pulsing Effect for Ringing */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900">
+               {/* Pulsing Effect based on Audio Level */}
+               {isConnected && (
+                  <motion.div
+                    className="absolute w-48 h-48 rounded-full bg-green-500/20 blur-xl"
+                    animate={{
+                      scale: 1 + (audioLevel / 50),
+                      opacity: 0.3 + (audioLevel / 200)
+                    }}
+                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                  />
+               )}
+
+               {/* Ringing Animation */}
               {(isRinging || isConnecting) && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   {[1, 2, 3].map((i) => (
                     <motion.div
                       key={i}
-                      className="absolute w-40 h-40 rounded-full border border-green-500/30"
+                      className="absolute w-40 h-40 rounded-full border border-primary/30"
                       initial={{ scale: 0.8, opacity: 0.5 }}
                       animate={{ 
                         scale: [0.8, 2 + i * 0.5], 
@@ -152,13 +177,21 @@ export const CallOverlay = () => {
                 </AvatarFallback>
               </Avatar>
               
-              <div className="mt-6 text-center z-10">
-                <h2 className="text-2xl font-semibold text-white mb-2">
+              <div className="mt-8 text-center z-10">
+                <h2 className="text-3xl font-bold text-white mb-2 tracking-tight">
                   {activeCall.otherParticipant?.display_name || "Usuário"}
                 </h2>
-                <p className="text-zinc-400 text-lg animate-pulse">
-                  {isRinging ? "Chamando..." : isConnecting ? "Conectando..." : formatDuration(callDuration)}
-                </p>
+                <div className="flex items-center justify-center gap-2">
+                    {isRinging ? (
+                         <span className="text-zinc-400 text-lg animate-pulse">Chamando...</span>
+                    ) : isConnecting ? (
+                         <span className="text-zinc-400 text-lg animate-pulse">Conectando...</span>
+                    ) : (
+                        <Badge variant="outline" className="bg-zinc-800/50 border-zinc-700 text-zinc-300 px-3 py-1 text-sm font-mono">
+                            {formatDuration(callDuration)}
+                        </Badge>
+                    )}
+                </div>
               </div>
             </div>
           )}
@@ -168,7 +201,9 @@ export const CallOverlay = () => {
              <motion.div 
                drag
                dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-               className="absolute top-4 right-4 w-32 h-48 bg-zinc-900 rounded-xl overflow-hidden border border-zinc-700 shadow-xl z-20 cursor-move"
+               whileHover={{ scale: 1.05 }}
+               whileTap={{ scale: 0.95 }}
+               className="absolute top-4 right-4 w-32 h-48 bg-zinc-900 rounded-2xl overflow-hidden border-2 border-zinc-700/50 shadow-2xl z-20 cursor-move"
              >
                 <video
                   ref={localVideoRef}
@@ -180,87 +215,143 @@ export const CallOverlay = () => {
              </motion.div>
           )}
 
-          {/* Connection Quality Indicator */}
-          {isConnected && (
-             <div className="absolute top-4 left-4 flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full z-20">
-                <Signal className={cn(
-                  "w-4 h-4",
-                  connectionQuality === 'good' ? "text-green-500" : 
-                  connectionQuality === 'poor' ? "text-yellow-500" : "text-red-500"
-                )} />
-                <span className="text-xs text-white/80">
-                  {connectionQuality === 'good' ? "Boa conexão" : "Instável"}
-                </span>
-             </div>
-          )}
+          {/* Top Bar (Quality & Minimize) */}
+          <div className="absolute top-6 left-6 flex items-center gap-3 z-20">
+             <Button 
+                variant="outline" 
+                size="icon" 
+                className="rounded-full bg-black/20 backdrop-blur border-white/10 text-white hover:bg-black/40"
+                onClick={() => setIsMinimized(true)}
+             >
+                <Minimize2 className="w-5 h-5" />
+             </Button>
+
+             {isConnected && (
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button variant="ghost" className="h-10 px-3 rounded-full bg-black/20 backdrop-blur border border-white/10 text-white hover:bg-black/40 gap-2">
+                             {simpleQuality === 'good' ? (
+                                 <Wifi className="w-4 h-4 text-green-500" />
+                             ) : simpleQuality === 'poor' ? (
+                                 <Wifi className="w-4 h-4 text-yellow-500" />
+                             ) : (
+                                 <WifiOff className="w-4 h-4 text-red-500" />
+                             )}
+                             <span className="text-xs font-medium">
+                                {simpleQuality === 'good' ? 'Estável' : 'Instável'}
+                             </span>
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64 bg-zinc-900/95 border-zinc-800 text-zinc-200 backdrop-blur-xl p-4" align="start">
+                        <div className="space-y-3">
+                            <h4 className="font-semibold text-sm flex items-center gap-2">
+                                <Activity className="w-4 h-4" /> Estatísticas da Rede
+                            </h4>
+                            {activeCall.connectionQuality ? (
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <div className="bg-black/40 p-2 rounded">
+                                        <div className="text-zinc-500 mb-1">Ping</div>
+                                        <div className="font-mono text-green-400">{activeCall.connectionQuality.latency.toFixed(0)}ms</div>
+                                    </div>
+                                    <div className="bg-black/40 p-2 rounded">
+                                        <div className="text-zinc-500 mb-1">Perda</div>
+                                        <div className="font-mono text-blue-400">{activeCall.connectionQuality.packetLoss.toFixed(1)}%</div>
+                                    </div>
+                                    <div className="bg-black/40 p-2 rounded col-span-2">
+                                        <div className="text-zinc-500 mb-1">Status ICE</div>
+                                        <div className="font-mono capitalize">{activeCall.connectionQuality.rating}</div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="text-xs text-zinc-500">Coletando dados...</p>
+                            )}
+                        </div>
+                    </PopoverContent>
+                </Popover>
+             )}
+          </div>
         </div>
 
-        {/* Control Bar */}
-        <div className="relative z-30 bg-zinc-900/90 backdrop-blur-lg border-t border-white/10 p-6 pb-8">
-           <div className="flex items-center justify-center gap-6 max-w-md mx-auto">
+        {/* Bottom Control Bar */}
+        <div className="relative z-30 bg-zinc-900/80 backdrop-blur-2xl border-t border-white/5 p-6 pb-8 safe-area-pb">
+           <div className="flex items-center justify-center gap-4 sm:gap-8 max-w-lg mx-auto">
               
               {/* Mute Toggle */}
-              <Button
-                variant="outline"
-                size="icon"
-                className={cn(
-                  "w-14 h-14 rounded-full border-0 transition-all duration-200",
-                  isAudioEnabled ? "bg-zinc-800 hover:bg-zinc-700 text-white" : "bg-white text-black hover:bg-zinc-200"
-                )}
-                onClick={handleToggleAudio}
-              >
-                {isAudioEnabled ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
-              </Button>
+              <div className="flex flex-col items-center gap-1">
+                <Button
+                    variant="outline"
+                    size="icon"
+                    className={cn(
+                    "w-14 h-14 rounded-full border-0 transition-all duration-300 shadow-lg",
+                    isAudioEnabled ? "bg-zinc-800 hover:bg-zinc-700 text-white" : "bg-white text-black hover:bg-zinc-200 scale-110"
+                    )}
+                    onClick={handleToggleAudio}
+                >
+                    {isAudioEnabled ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
+                </Button>
+                <span className="text-[10px] text-zinc-400 font-medium">Mute</span>
+              </div>
 
               {/* Video Toggle */}
               {isVideoCall && (
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className={cn(
-                    "w-14 h-14 rounded-full border-0 transition-all duration-200",
-                    isVideoEnabled ? "bg-zinc-800 hover:bg-zinc-700 text-white" : "bg-white text-black hover:bg-zinc-200"
-                  )}
-                  onClick={handleToggleVideo}
-                >
-                  {isVideoEnabled ? <Video className="w-6 h-6" /> : <VideoOff className="w-6 h-6" />}
-                </Button>
+                <div className="flex flex-col items-center gap-1">
+                    <Button
+                    variant="outline"
+                    size="icon"
+                    className={cn(
+                        "w-14 h-14 rounded-full border-0 transition-all duration-300 shadow-lg",
+                        isVideoEnabled ? "bg-zinc-800 hover:bg-zinc-700 text-white" : "bg-white text-black hover:bg-zinc-200 scale-110"
+                    )}
+                    onClick={handleToggleVideo}
+                    >
+                    {isVideoEnabled ? <Video className="w-6 h-6" /> : <VideoOff className="w-6 h-6" />}
+                    </Button>
+                    <span className="text-[10px] text-zinc-400 font-medium">Camera</span>
+                </div>
               )}
 
               {/* End Call (Center, Large) */}
-              <Button
-                variant="destructive"
-                size="icon"
-                className="w-20 h-20 rounded-full shadow-lg bg-red-500 hover:bg-red-600 border-4 border-zinc-900"
-                onClick={endCall}
-              >
-                <PhoneOff className="w-10 h-10 text-white" />
-              </Button>
+              <div className="flex flex-col items-center gap-1 mx-2">
+                <Button
+                    variant="destructive"
+                    size="icon"
+                    className="w-20 h-20 rounded-full shadow-red-900/20 shadow-xl bg-red-500 hover:bg-red-600 border-4 border-zinc-900 transition-transform hover:scale-105 active:scale-95"
+                    onClick={endCall}
+                >
+                    <PhoneOff className="w-9 h-9 text-white fill-current" />
+                </Button>
+              </div>
 
               {/* Switch Camera */}
               {isVideoCall && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="w-14 h-14 rounded-full bg-zinc-800 hover:bg-zinc-700 text-white border-0"
-                  onClick={switchCamera}
-                >
-                  <SwitchCamera className="w-6 h-6" />
-                </Button>
+                <div className="flex flex-col items-center gap-1">
+                    <Button
+                    variant="ghost"
+                    size="icon"
+                    className="w-14 h-14 rounded-full bg-zinc-800 hover:bg-zinc-700 text-white border-0 transition-all duration-300 shadow-lg"
+                    onClick={switchCamera}
+                    >
+                    <SwitchCamera className="w-6 h-6" />
+                    </Button>
+                    <span className="text-[10px] text-zinc-400 font-medium">Virar</span>
+                </div>
               )}
 
               {/* Chat Toggle */}
-              <Button
-                 variant="ghost"
-                 size="icon"
-                 className={cn(
-                   "w-14 h-14 rounded-full bg-zinc-800 hover:bg-zinc-700 text-white border-0",
-                   showChat && "bg-blue-600 text-white hover:bg-blue-700"
-                 )}
-                 onClick={() => setShowChat(!showChat)}
-              >
-                 <MessageSquare className="w-6 h-6" />
-              </Button>
+              <div className="flex flex-col items-center gap-1">
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                    "w-14 h-14 rounded-full bg-zinc-800 hover:bg-zinc-700 text-white border-0 transition-all duration-300 shadow-lg",
+                    showChat && "bg-blue-600 text-white hover:bg-blue-700 ring-2 ring-blue-400/50"
+                    )}
+                    onClick={() => setShowChat(!showChat)}
+                >
+                    <MessageSquare className="w-6 h-6" />
+                </Button>
+                <span className="text-[10px] text-zinc-400 font-medium">Chat</span>
+              </div>
            </div>
         </div>
 
@@ -271,7 +362,7 @@ export const CallOverlay = () => {
             onClose={() => setShowChat(false)}
           />
 
-        </motion.div>
-      </AnimatePresence>
-    );
-  };
+      </motion.div>
+    </AnimatePresence>
+  );
+};

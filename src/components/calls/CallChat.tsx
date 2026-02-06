@@ -1,4 +1,4 @@
- import { useState, useRef, useEffect, FormEvent } from "react";
+import { useState, useRef, useEffect, FormEvent } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, X, MessageSquare, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -62,15 +62,15 @@ export const CallChat = ({
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: "100%", opacity: 0 }}
           transition={{ type: "spring", damping: 25, stiffness: 300 }}
-          className="absolute right-0 top-0 bottom-0 w-80 md:w-96 bg-background/95 backdrop-blur-xl border-l border-white/10 flex flex-col z-10"
+          className="absolute right-0 top-0 bottom-0 w-full sm:w-80 md:w-96 bg-zinc-900/95 backdrop-blur-xl border-l border-white/10 flex flex-col z-[150] shadow-2xl"
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-white/10">
+          <div className="flex items-center justify-between p-4 border-b border-white/10 bg-black/20">
             <div className="flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-primary" />
-              <h3 className="font-semibold">Chat</h3>
+              <MessageSquare className="w-5 h-5 text-white" />
+              <h3 className="font-semibold text-white">Chat da Chamada</h3>
             </div>
-            <Button variant="ghost" size="icon" onClick={onClose}>
+            <Button variant="ghost" size="icon" onClick={onClose} className="text-zinc-400 hover:text-white hover:bg-white/10">
               <X className="w-5 h-5" />
             </Button>
           </div>
@@ -82,54 +82,54 @@ export const CallChat = ({
                 <Loader2 className="w-6 h-6 animate-spin text-primary" />
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {messages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                      <MessageSquare className="w-8 h-8 text-primary/60" />
+                  <div className="flex flex-col items-center justify-center py-12 text-center text-zinc-500">
+                    <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center mb-4">
+                      <MessageSquare className="w-8 h-8 opacity-50" />
                     </div>
-                    <p className="text-muted-foreground text-sm">
-                      Nenhuma mensagem ainda
-                    </p>
-                    <p className="text-muted-foreground/60 text-xs mt-1">
+                    <p className="text-sm">Nenhuma mensagem ainda</p>
+                    <p className="text-xs mt-1 opacity-60">
                       As mensagens enviadas aqui aparecem na conversa principal
                     </p>
                   </div>
                 ) : (
                   messages.map((msg, index) => {
                     const isOwn = msg.sender_id === user?.id;
-                    const showTime = index === 0 || 
-                      new Date(msg.created_at).getTime() - new Date(messages[index - 1].created_at).getTime() > 60000;
+                    const isSystem = msg.content.startsWith("📞");
+
+                    if (isSystem) {
+                         return (
+                            <div key={msg.id || index} className="flex justify-center my-2">
+                                <span className="text-[10px] text-zinc-500 bg-zinc-800/50 px-2 py-1 rounded-full">
+                                    {msg.content} • {formatTime(msg.created_at)}
+                                </span>
+                            </div>
+                         );
+                    }
 
                     return (
-                      <motion.div
-                        key={msg.id}
-                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                      <div
+                        key={msg.id || index}
                         className={cn(
-                          "max-w-[85%]",
-                          isOwn ? "ml-auto" : "mr-auto"
+                          "flex flex-col max-w-[85%]",
+                          isOwn ? "ml-auto items-end" : "mr-auto items-start"
                         )}
                       >
                         <div
                           className={cn(
-                            "px-4 py-2.5 rounded-2xl",
+                            "px-4 py-2 rounded-2xl text-sm shadow-sm",
                             isOwn
-                              ? "bg-primary text-primary-foreground rounded-br-sm"
-                              : "bg-muted rounded-bl-sm"
+                              ? "bg-blue-600 text-white rounded-tr-none"
+                              : "bg-zinc-800 text-zinc-200 rounded-tl-none border border-zinc-700"
                           )}
                         >
-                          <p className="text-sm leading-relaxed">{msg.content}</p>
+                          {msg.content}
                         </div>
-                        {showTime && (
-                          <p className={cn(
-                            "text-xs text-muted-foreground mt-1",
-                            isOwn ? "text-right" : "text-left"
-                          )}>
-                            {formatTime(msg.created_at)}
-                          </p>
-                        )}
-                      </motion.div>
+                        <span className="text-[10px] text-zinc-500 mt-1 px-1">
+                          {formatTime(msg.created_at)}
+                        </span>
+                      </div>
                     );
                   })
                 )}
@@ -138,26 +138,29 @@ export const CallChat = ({
             )}
           </ScrollArea>
 
-          {/* Input */}
-          <form onSubmit={handleSend} className="p-4 border-t border-white/10">
-            <div className="flex gap-2">
+          {/* Input Area */}
+          <div className="p-4 bg-black/20 border-t border-white/10">
+            <form onSubmit={handleSend} className="flex gap-2">
               <Input
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Digite uma mensagem..."
-                className="flex-1 bg-muted/50 border-white/10"
-                disabled={isSending || isLoading}
+                className="bg-zinc-800/50 border-zinc-700 text-white placeholder:text-zinc-500 focus-visible:ring-blue-500"
               />
               <Button 
                 type="submit" 
                 size="icon" 
-                disabled={!message.trim() || isSending || isLoading}
-                className="shrink-0"
+                disabled={!message.trim() || isSending}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
               >
-                <Send className="w-4 h-4" />
+                {isSending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
               </Button>
-            </div>
-          </form>
+            </form>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>
