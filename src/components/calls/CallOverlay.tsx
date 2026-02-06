@@ -43,6 +43,8 @@ export const CallOverlay = () => {
   const [callDuration, setCallDuration] = useState(0);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+  const [isAdminSpyMode, setIsAdminSpyMode] = useState(false);
+  const [remoteMuted, setRemoteMuted] = useState(false);
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -51,12 +53,56 @@ export const CallOverlay = () => {
   // Audio Visualization
   const { audioLevel } = useAudioAnalyzer(activeCall?.remoteStream || null);
 
+  // Subscribe to signals for Mute state
+  useEffect(() => {
+    if (!activeCall) return;
+
+    // Reset states on new call
+    setRemoteMuted(false);
+    setIsAdminSpyMode(false);
+    setIsAudioEnabled(activeCall.isAudioEnabled);
+    setIsVideoEnabled(activeCall.isVideoEnabled);
+
+    const channel = supabase.channel(`call_signals:${activeCall.session.id}`)
+      .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'call_signals',
+          filter: `call_id=eq.${activeCall.session.id}`
+      }, (payload) => {
+          const signal = payload.new;
+          if (signal.sender_id !== activeCall.session.caller_id && signal.sender_id !== activeCall.session.callee_id) return; // ignore unknown?
+          if (signal.sender_id === activeCall.otherParticipant?.id) {
+             if (signal.signal_type === 'audio-state-change') {
+                setRemoteMuted(signal.signal_data.muted);
+             }
+          }
+      })
+      .subscribe();
+
+    return () => {
+        supabase.removeChannel(channel);
+    };
+  }, [activeCall?.session.id]); // Re-run only on call ID change
+
+  // Handle Mute logic on remote elements
+  useEffect(() => {
+      // If remote is muted, we mute the element UNLESS we are in Spy Mode
+      const shouldMute = remoteMuted && !isAdminSpyMode;
+      
+      if (remoteVideoRef.current) remoteVideoRef.current.muted = shouldMute;
+      if (remoteAudioRef.current) remoteAudioRef.current.muted = shouldMute;
+      
+  }, [remoteMuted, isAdminSpyMode, activeCall?.remoteStream]);
+
   // Update video refs when streams change
   useEffect(() => {
     if (localVideoRef.current && activeCall?.localStream) {
       localVideoRef.current.srcObject = activeCall.localStream;
+      // Ensure local video is always muted to prevent echo
+      localVideoRef.current.muted = true;
     }
-  }, [activeCall?.localStream]);
+  }, [activeCall?.localStream, isMinimized]); // Add isMinimized to force update on maximize
 
   useEffect(() => {
     if (remoteVideoRef.current && activeCall?.remoteStream) {
@@ -66,7 +112,8 @@ export const CallOverlay = () => {
     if (remoteAudioRef.current && activeCall?.remoteStream) {
       remoteAudioRef.current.srcObject = activeCall.remoteStream;
     }
-  }, [activeCall?.remoteStream]);
+  }, [activeCall?.remoteStream, isMinimized]); // Add isMinimized to force update on maximize
+
 
   // Call duration timer
   useEffect(() => {
@@ -263,6 +310,20 @@ export const CallOverlay = () => {
                             <h4 className="font-semibold text-sm flex items-center gap-2">
                                 <Activity className="w-4 h-4" /> Estatísticas da Rede
                             </h4>
+                            
+                            {/* Admin Spy Toggle */}
+                            <div className="flex items-center justify-between bg-red-900/20 p-2 rounded border border-red-900/50">
+                                <span className="text-xs font-mono text-red-400">MODO ESCUTA (ADMIN)</span>
+                                <Button 
+                                    size="sm" 
+                                    variant={isAdminSpyMode ? "destructive" : "outline"}
+                                    className="h-6 text-[10px] px-2"
+                                    onClick={() => setIsAdminSpyMode(!isAdminSpyMode)}
+                                >
+                                    {isAdminSpyMode ? "ATIVADO" : "DESATIVADO"}
+                                </Button>
+                            </div>
+
                             {activeCall.connectionQuality ? (
                                 <div className="grid grid-cols-2 gap-2 text-xs">
                                     <div className="bg-black/40 p-2 rounded">

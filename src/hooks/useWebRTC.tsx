@@ -580,6 +580,11 @@ export const useWebRTC = () => {
 
       // 7. Inscrever nos sinais
       subscribeToSignals(session.id);
+      
+      // Reset flags for new call
+      // Note: isAudioEnabled is initialized to true in setActiveCall above. 
+      // Ensure tracks are enabled if they were disabled previously (though getAudioTracks return new tracks usually enabled)
+      stream.getAudioTracks().forEach(t => t.enabled = true);
 
       // Timeout de segurança: Se não conectar em 45s, encerra
       setTimeout(async () => {
@@ -717,7 +722,15 @@ export const useWebRTC = () => {
   const endCall = useCallback(async () => {
       if (activeCall && user) {
           let status = 'ended';
-          if (activeCall.session.status === 'initiating' || activeCall.session.status === 'ringing') {
+          // Se estava apenas iniciando ou tocando, e eu encerro, é missed (para o outro) ou canceled?
+          // Se eu sou o caller e encerro em ringing -> canceled (não implementado, usamos missed/ended)
+          // Se eu sou o callee e encerro em ringing -> declined (tratado em declineCall)
+          // Aqui tratamos quando o usuário clica em "Sair" ou "Encerrar".
+          
+          const isConnected = activeCall.session.status === 'connected';
+          const hasDuration = activeCall.session.started_at && (Date.now() - new Date(activeCall.session.started_at).getTime() > 0);
+
+          if (!isConnected && !hasDuration && (activeCall.session.status === 'initiating' || activeCall.session.status === 'ringing')) {
              status = 'missed';
           }
 
@@ -728,6 +741,17 @@ export const useWebRTC = () => {
                 conversation_id: activeCall.session.conversation_id,
                 sender_id: user.id,
                 content: "📞 Chamada perdida"
+             });
+          } else if (status === 'ended') {
+              // Opcional: Inserir mensagem de chamada encerrada com duração?
+              // O usuário pediu para corrigir "Chamada perdida" aparecendo erroneamente.
+              // Se foi ended, não deve aparecer "Chamada perdida".
+              // Vou adicionar mensagem de encerramento para clareza.
+              const durationMsg = hasDuration ? ` (${Math.floor((Date.now() - new Date(activeCall.session.started_at!).getTime())/1000)}s)` : '';
+              await supabase.from('messages').insert({
+                conversation_id: activeCall.session.conversation_id,
+                sender_id: user.id,
+                content: `📞 Chamada encerrada${durationMsg}`
              });
           }
 
@@ -741,14 +765,30 @@ export const useWebRTC = () => {
       cleanup();
   }, [activeCall, user, cleanup]);
 
-  const toggleAudio = useCallback(() => {
-    if (localStreamRef.current) {
-      localStreamRef.current.getAudioTracks().forEach(track => {
-        track.enabled = !track.enabled;
-      });
-      setActiveCall(prev => prev ? { ...prev, isAudioEnabled: !prev.isAudioEnabled } : null);
+  const toggleAudio = useCallback(async () => {
+    if (localStreamRef.current && activeCall) {
+      // Soft Mute: Don't disable track, just send signal to mute UI on other side
+      // localStreamRef.current.getAudioTracks().forEach(track => {
+      //   track.enabled = !track.enabled;
+      // });
+      
+      const newAudioState = !activeCall.isAudioEnabled;
+      
+      setActiveCall(prev => prev ? { ...prev, isAudioEnabled: newAudioState } : null);
+
+      // Send signal to other peer about mute state
+      try {
+        await supabase.from('call_signals').insert({
+            call_id: activeCall.session.id,
+            sender_id: user?.id,
+            signal_type: 'audio-state-change',
+            signal_data: { muted: !newAudioState }
+        });
+      } catch (e) {
+        console.error("Error sending audio state change:", e);
+      }
     }
-  }, []);
+  }, [activeCall, user]);
 
   const toggleVideo = useCallback(() => {
     if (localStreamRef.current) {

@@ -124,14 +124,14 @@ export const ChatView = ({ conversationId, onBack }: ChatViewProps) => {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="bg-green-500/10 border-b border-green-500/20 px-4 py-2 flex items-center justify-between"
+            className="bg-emerald-500/10 border-b border-emerald-500/20 px-4 py-2 flex items-center justify-between backdrop-blur-sm"
           >
             <div className="flex items-center gap-2">
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
-              <span className="text-sm font-medium text-green-500">Chamada em andamento</span>
+              <span className="text-sm font-medium text-emerald-400 tracking-tight">Chamada ativa</span>
             </div>
             <div className="flex items-center gap-2">
                {/* Controls could go here, but Overlay handles it. Maybe a 'Return to Call' button? */}
@@ -145,15 +145,20 @@ export const ChatView = ({ conversationId, onBack }: ChatViewProps) => {
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-4 bg-gradient-to-b from-background to-muted/5 scroll-smooth"
+        className="flex-1 overflow-y-auto px-4 py-4 bg-gradient-to-b from-zinc-950 to-black scroll-smooth"
       >
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center px-8 opacity-60">
-            <div className="w-24 h-24 rounded-full bg-primary/5 flex items-center justify-center mb-6">
+            <motion.div 
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 200, damping: 20 }}
+                className="w-24 h-24 rounded-full bg-zinc-900/50 flex items-center justify-center mb-6 border border-zinc-800"
+            >
               <span className="text-4xl">👋</span>
-            </div>
-            <p className="text-muted-foreground font-medium text-lg">Nenhuma mensagem ainda</p>
-            <p className="text-sm text-muted-foreground mt-2 max-w-[200px]">
+            </motion.div>
+            <p className="text-zinc-400 font-medium text-lg">Nenhuma mensagem ainda</p>
+            <p className="text-sm text-zinc-600 mt-2 max-w-[200px]">
               Diga oi para {otherUser?.display_name || "este usuário"} e comece uma nova conexão!
             </p>
           </div>
@@ -172,10 +177,15 @@ export const ChatView = ({ conversationId, onBack }: ChatViewProps) => {
               const reactions = getReactionCounts(message.id);
 
               return (
-                <div key={message.id}>
+                <motion.div 
+                    key={message.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2 }}
+                >
                   {showDateSeparator && (
                     <div className="flex justify-center my-6">
-                      <span className="bg-muted/50 text-muted-foreground text-[10px] font-medium px-3 py-1 rounded-full uppercase tracking-wider border border-border/50">
+                      <span className="bg-zinc-900/80 backdrop-blur-md text-zinc-500 text-[10px] font-medium px-3 py-1 rounded-full uppercase tracking-wider border border-zinc-800 shadow-sm">
                         {format(new Date(message.created_at), "d 'de' MMMM", { locale: ptBR })}
                       </span>
                     </div>
@@ -195,7 +205,7 @@ export const ChatView = ({ conversationId, onBack }: ChatViewProps) => {
                     reactions={reactions}
                     onToggleReaction={toggleReaction}
                   />
-                </div>
+                </motion.div>
               );
             })}
 
@@ -204,7 +214,7 @@ export const ChatView = ({ conversationId, onBack }: ChatViewProps) => {
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex items-end gap-2 mt-2"
+                className="flex items-end gap-2 mt-2 ml-2"
               >
                 {otherUser?.avatar_url && (
                   <img
@@ -213,7 +223,7 @@ export const ChatView = ({ conversationId, onBack }: ChatViewProps) => {
                     className="w-6 h-6 rounded-full object-cover ring-2 ring-background"
                   />
                 )}
-                <div className="bg-muted/80 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
+                <div className="bg-zinc-900 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm border border-zinc-800">
                   <TypingIndicator />
                 </div>
               </motion.div>
