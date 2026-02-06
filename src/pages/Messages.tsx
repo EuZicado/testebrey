@@ -85,7 +85,7 @@ const Messages = () => {
 
   return (
     <AppLayout>
-      <div className="relative flex flex-col h-screen bg-zinc-950 overflow-hidden font-sans">
+      <div className="relative flex flex-col h-screen bg-zinc-900 overflow-hidden font-sans">
         
         {/* ChatView Overlay - Resolve o problema do BottomNav */}
         <AnimatePresence>
@@ -95,7 +95,7 @@ const Messages = () => {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: "100%", opacity: 0 }}
               transition={{ type: "spring", damping: 30, stiffness: 300, mass: 0.8 }}
-              className="fixed inset-0 z-[60] bg-black"
+              className="fixed inset-0 z-[60] bg-zinc-950"
             >
               <ChatView
                 conversationId={selectedConversationId}
