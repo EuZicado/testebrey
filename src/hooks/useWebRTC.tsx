@@ -57,6 +57,31 @@ export const useWebRTC = () => {
     };
   }, [user]);
 
+  // Monitorar status da chamada recebida (cancelar se o chamador desligar)
+  useEffect(() => {
+    if (!incomingCall) return;
+
+    const channel = supabase.channel(`incoming_status:${incomingCall.session.id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'call_sessions',
+        filter: `id=eq.${incomingCall.session.id}`
+      }, (payload) => {
+        const newStatus = payload.new.status;
+        if (['ended', 'missed', 'declined', 'rejected'].includes(newStatus)) {
+           console.log("Chamada cancelada remotamente:", newStatus);
+           setIncomingCall(null);
+           toast.info("Chamada encerrada.");
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [incomingCall]);
+
   // Cleanup completo - libera câmera/microfone
   const cleanup = useCallback(async () => {
     console.log("🧹 Limpando conexão WebRTC...");
@@ -615,7 +640,7 @@ export const useWebRTC = () => {
         await supabase.from('call_sessions').update({ status: 'connected', started_at: new Date().toISOString() }).eq('id', callId);
 
         setActiveCall({
-            session: incomingCall.session,
+            session: { ...incomingCall.session, status: 'connected' },
             localStream: stream,
             remoteStream: null,
             isScreenSharing: false,
