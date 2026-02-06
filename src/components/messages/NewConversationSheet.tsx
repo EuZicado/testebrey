@@ -58,14 +58,14 @@ export const NewConversationSheet = ({
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl">
+      <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl bg-zinc-950 border-zinc-800 text-zinc-100">
         <SheetHeader className="pb-4">
-          <div className="w-10 h-1 bg-muted-foreground/30 rounded-full mx-auto mb-3" />
+          <div className="w-10 h-1 bg-zinc-800 rounded-full mx-auto mb-3" />
           <div className="flex items-center justify-between">
-            <SheetTitle className="text-xl font-bold">Nova Mensagem</SheetTitle>
+            <SheetTitle className="text-xl font-bold text-zinc-100">Nova Mensagem</SheetTitle>
             <button
               onClick={onClose}
-              className="p-2 rounded-full hover:bg-muted transition-colors"
+              className="p-2 rounded-full hover:bg-zinc-900 transition-colors text-zinc-400 hover:text-white"
             >
               <X className="w-5 h-5" />
             </button>
@@ -74,12 +74,12 @@ export const NewConversationSheet = ({
 
         {/* Search Input */}
         <div className="relative mb-4">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar usuários..."
-            className="pl-10 bg-muted/50 border-0 rounded-xl h-12"
+            className="pl-10 bg-zinc-900 border-zinc-800 rounded-xl h-12 text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-emerald-500/50"
             autoFocus
           />
         </div>
@@ -88,23 +88,23 @@ export const NewConversationSheet = ({
         <div className="flex-1 overflow-y-auto space-y-1 -mx-2 px-2">
           {isSearching ? (
             <div className="flex flex-col items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-primary mb-3" />
-              <p className="text-sm text-muted-foreground">Buscando usuários...</p>
+              <Loader2 className="w-8 h-8 animate-spin text-emerald-500 mb-3" />
+              <p className="text-sm text-zinc-500">Buscando usuários...</p>
             </div>
           ) : !query ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mb-4">
-                <MessageCircle className="w-10 h-10 text-muted-foreground" />
+              <div className="w-20 h-20 rounded-full bg-zinc-900 flex items-center justify-center mb-4">
+                <MessageCircle className="w-10 h-10 text-zinc-600" />
               </div>
-              <p className="text-muted-foreground font-medium">Buscar pessoas</p>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="text-zinc-400 font-medium">Buscar pessoas</p>
+              <p className="text-sm text-zinc-600 mt-1">
                 Digite o nome ou @username
               </p>
             </div>
           ) : results.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <p className="text-muted-foreground">Nenhum usuário encontrado</p>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="text-zinc-400">Nenhum usuário encontrado</p>
+              <p className="text-sm text-zinc-600 mt-1">
                 Tente outro nome ou username
               </p>
             </div>
@@ -119,35 +119,35 @@ export const NewConversationSheet = ({
                 disabled={selectedUserId !== null || !u.can_message}
                 className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all ${
                   u.can_message 
-                    ? "hover:bg-muted/50 active:bg-muted active:scale-[0.98]" 
+                    ? "hover:bg-zinc-900 active:bg-zinc-800 active:scale-[0.98]" 
                     : "opacity-50 cursor-not-allowed"
                 }`}
               >
-                <Avatar className="w-14 h-14">
+                <Avatar className="w-14 h-14 ring-1 ring-zinc-800">
                   <AvatarImage src={u.avatar_url || undefined} className="object-cover" />
-                  <AvatarFallback className="bg-secondary text-lg font-semibold">
+                  <AvatarFallback className="bg-zinc-900 text-zinc-400 text-lg font-semibold">
                     {(u.display_name || u.username || "U")[0].toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 text-left">
-                  <p className="font-semibold flex items-center gap-1.5">
+                  <p className="font-semibold flex items-center gap-1.5 text-zinc-200">
                     {u.display_name || u.username || "Usuário"}
                     {u.is_verified && (
-                      <BadgeCheck className="w-4 h-4 text-primary" />
+                      <BadgeCheck className="w-4 h-4 text-emerald-500" />
                     )}
                   </p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-zinc-500">
                     @{u.username || "usuario"}
                   </p>
                 </div>
                 {!u.can_message && (
-                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <div className="flex items-center gap-1.5 text-red-500/50">
                     <Lock className="w-4 h-4" />
                     <span className="text-xs">Bloqueado</span>
                   </div>
                 )}
                 {selectedUserId === u.id && (
-                  <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                  <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
                 )}
               </motion.button>
             ))

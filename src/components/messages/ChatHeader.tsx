@@ -47,7 +47,11 @@ export const ChatHeader = ({
       }
       return;
     }
-    await startCall(conversationId, otherUserId, "audio");
+    await startCall(conversationId, otherUserId, "audio", {
+      displayName: displayName || "Usuário",
+      username: username || "usuario",
+      avatarUrl: avatarUrl || ""
+    });
   };
 
   const handleVideoCall = async () => {
@@ -59,24 +63,28 @@ export const ChatHeader = ({
       }
       return;
     }
-    await startCall(conversationId, otherUserId, "video");
+    await startCall(conversationId, otherUserId, "video", {
+      displayName: displayName || "Usuário",
+      username: username || "usuario",
+      avatarUrl: avatarUrl || ""
+    });
   };
 
   return (
-    <header className="glass-strong border-b border-white/5 px-4 py-3 safe-top">
+    <header className="bg-zinc-900/80 backdrop-blur-md border-b border-zinc-800 px-4 py-3 safe-top">
       <div className="flex items-center gap-3">
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={onBack}
-          className="p-2 -ml-2 rounded-full hover:bg-muted/50 transition-colors"
+          className="p-2 -ml-2 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
         </motion.button>
         
         <div className="relative">
-          <Avatar className="w-10 h-10 ring-2 ring-background">
-            <AvatarImage src={avatarUrl || undefined} />
-            <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/5">
+          <Avatar className="w-10 h-10 ring-2 ring-zinc-950">
+            <AvatarImage src={avatarUrl || undefined} className="object-cover" />
+            <AvatarFallback className="bg-zinc-800 text-zinc-400 font-bold">
               {(displayName || "U")[0].toUpperCase()}
             </AvatarFallback>
           </Avatar>
@@ -84,27 +92,27 @@ export const ChatHeader = ({
             <motion.div 
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
-              className="absolute bottom-0 right-0 w-3 h-3 bg-success rounded-full border-2 border-background"
+              className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-zinc-950"
             />
           )}
         </div>
         
         <div className="flex-1 min-w-0">
-          <p className="font-semibold truncate">{displayName || username || "Usuário"}</p>
+          <p className="font-semibold truncate text-zinc-100">{displayName || username || "Usuário"}</p>
           {isInCallWithUser ? (
              <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              <p className="text-xs text-green-500 font-medium">Em chamada</p>
+              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+              <p className="text-xs text-emerald-500 font-medium">Em chamada</p>
              </div>
           ) : isTyping ? (
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-primary font-medium">Digitando</span>
+              <span className="text-xs text-emerald-500 font-medium">Digitando</span>
               <TypingIndicator className="scale-75 origin-left" />
             </div>
           ) : isOnline ? (
-            <p className="text-xs text-success font-medium">Online agora</p>
+            <p className="text-xs text-emerald-500 font-medium">Online agora</p>
           ) : (
-            <p className="text-xs text-muted-foreground">@{username || "unknown"}</p>
+            <p className="text-xs text-zinc-500">@{username || "unknown"}</p>
           )}
         </div>
 
@@ -115,7 +123,7 @@ export const ChatHeader = ({
             onClick={handleVoiceCall}
             className={cn(
               "p-2 rounded-full transition-colors",
-              isInCallWithUser ? "bg-green-500/20 text-green-500" : "hover:bg-muted/50 text-primary",
+              isInCallWithUser ? "bg-emerald-500/20 text-emerald-500" : "hover:bg-zinc-800 text-zinc-400 hover:text-emerald-500",
               activeCall && !isInCallWithUser && "opacity-30 cursor-not-allowed"
             )}
             disabled={!!activeCall && !isInCallWithUser}
@@ -128,7 +136,7 @@ export const ChatHeader = ({
             onClick={handleVideoCall}
             className={cn(
               "p-2 rounded-full transition-colors",
-              isInCallWithUser ? "bg-green-500/20 text-green-500" : "hover:bg-muted/50 text-primary",
+              isInCallWithUser ? "bg-emerald-500/20 text-emerald-500" : "hover:bg-zinc-800 text-zinc-400 hover:text-emerald-500",
                activeCall && !isInCallWithUser && "opacity-30 cursor-not-allowed"
             )}
              disabled={!!activeCall && !isInCallWithUser}
@@ -140,16 +148,16 @@ export const ChatHeader = ({
               <motion.button 
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
-                className="p-2 rounded-full hover:bg-muted/50 transition-colors"
+                className="p-2 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
               >
-                <MoreVertical className="w-5 h-5 text-muted-foreground" />
+                <MoreVertical className="w-5 h-5" />
               </motion.button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem>Ver perfil</DropdownMenuItem>
-              <DropdownMenuItem>Silenciar notificações</DropdownMenuItem>
-              <DropdownMenuItem>Buscar na conversa</DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive">Bloquear usuário</DropdownMenuItem>
+            <DropdownMenuContent align="end" className="w-48 bg-zinc-900 border-zinc-800 text-zinc-200">
+              <DropdownMenuItem className="focus:bg-zinc-800 focus:text-white cursor-pointer">Ver perfil</DropdownMenuItem>
+              <DropdownMenuItem className="focus:bg-zinc-800 focus:text-white cursor-pointer">Silenciar notificações</DropdownMenuItem>
+              <DropdownMenuItem className="focus:bg-zinc-800 focus:text-white cursor-pointer">Buscar na conversa</DropdownMenuItem>
+              <DropdownMenuItem className="text-red-400 focus:bg-red-900/20 focus:text-red-300 cursor-pointer">Bloquear usuário</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

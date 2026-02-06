@@ -120,7 +120,7 @@ export const CallChat = ({
                           className={cn(
                             "px-4 py-2 rounded-2xl text-sm shadow-sm",
                             isOwn
-                              ? "bg-blue-600 text-white rounded-tr-none"
+                              ? "bg-emerald-600 text-white rounded-tr-none shadow-emerald-900/20"
                               : "bg-zinc-800 text-zinc-200 rounded-tl-none border border-zinc-700"
                           )}
                         >

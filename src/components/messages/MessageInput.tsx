@@ -169,7 +169,7 @@ export const MessageInput = ({
 
   return (
     <>
-      <div className="glass-strong border-t border-white/5 px-4 py-3 safe-bottom">
+      <div className="bg-zinc-900/80 backdrop-blur-xl border-t border-zinc-800/50 px-4 py-3 safe-bottom">
         {/* Error Message */}
         <AnimatePresence>
           {sendingState === "error" && (

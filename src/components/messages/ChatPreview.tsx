@@ -92,36 +92,49 @@ export const ChatPreview = ({
       onClick={onClick}
       className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-muted/50 active:bg-muted transition-colors"
     >
-      {/* Avatar */}
-      <div className="relative flex-shrink-0">
-        <Avatar className="w-14 h-14">
-          <AvatarImage src={finalAvatar || undefined} alt={finalDisplayName} className="object-cover" />
-          <AvatarFallback className="bg-muted text-lg font-semibold">
-            {finalDisplayName?.[0]?.toUpperCase() || "?"}
-          </AvatarFallback>
-        </Avatar>
+      <div className="relative">
+        <div className={cn(
+          "w-14 h-14 rounded-full overflow-hidden border-2 transition-all duration-300",
+          unreadCount > 0 ? "border-emerald-500 ring-2 ring-emerald-500/20" : "border-zinc-800"
+        )}>
+          {finalAvatar ? (
+            <img 
+              src={finalAvatar} 
+              alt={finalDisplayName} 
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
+              <span className="text-lg font-bold text-zinc-400">
+                {finalDisplayName[0].toUpperCase()}
+              </span>
+            </div>
+          )}
+        </div>
         {isOnline && (
-          <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-green-500 border-2 border-background" />
+          <div className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-black rounded-full z-10" />
         )}
       </div>
 
-      {/* Content */}
       <div className="flex-1 min-w-0 text-left">
-        <div className="flex items-center gap-1.5">
-          <span className="font-semibold text-foreground truncate">{finalDisplayName}</span>
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <span className={cn(
+            "font-semibold text-base truncate",
+            unreadCount > 0 ? "text-white" : "text-zinc-300"
+          )}>
+            {finalDisplayName}
+          </span>
           {isVerified && (
-            <BadgeCheck className={cn("w-4 h-4 flex-shrink-0", getBadgeColor())} />
+            <BadgeCheck className="w-4 h-4 text-emerald-500 fill-emerald-500/10" />
           )}
         </div>
-        <div className={cn(
-          "flex items-center gap-1.5 mt-0.5",
-          unreadCount > 0 ? "text-foreground" : "text-muted-foreground"
-        )}>
-          {isStickerMessage && <Sticker className="w-3.5 h-3.5 flex-shrink-0 text-primary" />}
-          {isAudio && !isStickerMessage && <Mic className="w-3.5 h-3.5 flex-shrink-0 text-primary" />}
+
+        <div className="flex items-center gap-1.5 text-sm text-zinc-500">
+          {isStickerMessage && <Sticker className="w-3.5 h-3.5 flex-shrink-0 text-emerald-500" />}
+          {isAudio && !isStickerMessage && <Mic className="w-3.5 h-3.5 flex-shrink-0 text-emerald-500" />}
           <p className={cn(
-            "text-sm truncate",
-            unreadCount > 0 && "font-medium"
+            "truncate transition-colors",
+            unreadCount > 0 ? "text-zinc-200 font-medium" : "text-zinc-500"
           )}>
             {getMessagePreview()}
           </p>
@@ -129,11 +142,11 @@ export const ChatPreview = ({
       </div>
 
       {/* Meta */}
-      <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+      <div className="flex flex-col items-end gap-1.5 flex-shrink-0 pl-2">
         {finalTimestamp && (
           <span className={cn(
-            "text-xs",
-            unreadCount > 0 ? "text-primary font-medium" : "text-muted-foreground"
+            "text-[10px] font-medium",
+            unreadCount > 0 ? "text-emerald-400" : "text-zinc-600"
           )}>
             {finalTimestamp}
           </span>
@@ -142,9 +155,9 @@ export const ChatPreview = ({
           <motion.div 
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            className="min-w-[20px] h-5 px-1.5 rounded-full bg-primary flex items-center justify-center"
+            className="min-w-[20px] h-5 px-1.5 rounded-full bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-900/50"
           >
-            <span className="text-[10px] font-bold text-primary-foreground">
+            <span className="text-[10px] font-bold text-black">
               {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           </motion.div>

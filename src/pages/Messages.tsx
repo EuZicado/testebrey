@@ -85,17 +85,17 @@ const Messages = () => {
 
   return (
     <AppLayout>
-      <div className="relative flex flex-col h-screen bg-background overflow-hidden">
+      <div className="relative flex flex-col h-screen bg-black overflow-hidden font-sans">
         
         {/* ChatView Overlay - Resolve o problema do BottomNav */}
         <AnimatePresence>
           {selectedConversationId && (
             <motion.div 
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed inset-0 z-[60] bg-background"
+              initial={{ x: "100%", opacity: 0.5 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: "100%", opacity: 0 }}
+              transition={{ type: "spring", damping: 30, stiffness: 300, mass: 0.8 }}
+              className="fixed inset-0 z-[60] bg-black"
             >
               <ChatView
                 conversationId={selectedConversationId}
@@ -106,75 +106,102 @@ const Messages = () => {
         </AnimatePresence>
 
         {/* Header Principal */}
-        <header className="shrink-0 pt-safe bg-background/80 backdrop-blur-md border-b z-40">
-          <div className="px-4 py-4">
-            <div className="flex items-center justify-between mb-4">
+        <header className="shrink-0 pt-safe bg-zinc-950/80 backdrop-blur-xl border-b border-white/5 z-40 sticky top-0">
+          <div className="px-6 py-5">
+            <div className="flex items-center justify-between mb-6">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">Mensagens</h1>
-                <div className="flex items-center gap-2 mt-1">
-                  <Badge variant="secondary" className="bg-primary/10 text-primary border-none text-[10px] h-5">
+                <motion.h1 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-3xl font-bold tracking-tighter text-white"
+                >
+                  Mensagens
+                </motion.h1>
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.2 }}
+                  className="flex items-center gap-2 mt-1.5">
+                  <Badge variant="secondary" className="bg-zinc-800/50 text-zinc-400 border-zinc-700/50 text-[10px] h-5 px-2 hover:bg-zinc-800 transition-colors">
                     {stats.total} CONVERSAS
                   </Badge>
                   {stats.unread > 0 && (
-                    <Badge className="bg-primary text-primary-foreground border-none text-[10px] h-5">
+                    <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px] h-5 px-2">
                       {stats.unread} NOVAS
                     </Badge>
                   )}
-                </div>
+                </motion.div>
               </div>
-              <Button variant="ghost" size="icon" className="rounded-full bg-muted/50">
+              <Button variant="ghost" size="icon" className="rounded-full bg-zinc-900/50 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all duration-300">
                 <Settings2 className="w-5 h-5" />
               </Button>
             </div>
 
             {/* Barra de Busca */}
             <div className="relative group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 transition-colors group-focus-within:text-emerald-400" />
               <Input
+                placeholder="Buscar conversas..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar pessoas ou mensagens..."
-                className="pl-10 pr-10 rounded-2xl bg-muted/50 border-none h-11 focus-visible:ring-1 focus-visible:ring-primary"
+                className="pl-11 h-12 rounded-2xl bg-zinc-900/50 border-zinc-800/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:ring-emerald-500/50 focus-visible:border-emerald-500/50 transition-all duration-300"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-muted"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors"
                 >
-                  <X className="w-3 h-3 text-muted-foreground" />
+                  <X className="w-4 h-4" />
                 </button>
               )}
             </div>
           </div>
 
-          {/* Usuários Online (Stories Style) */}
-          {stats.online > 0 && (
-            <div className="pb-4">
-              <ScrollArea className="w-full whitespace-nowrap">
-                <div className="flex gap-4 px-4">
+          {/* Online Users Horizontal Scroll (Stories style) */}
+          {stats.online > 0 && !searchQuery && (
+            <div className="pb-4 animate-in fade-in slide-in-from-top-4 duration-500">
+              <ScrollArea className="w-full whitespace-nowrap px-6">
+                <div className="flex gap-4 pb-2">
+                  <motion.button 
+                    onClick={() => setShowNewConversation(true)}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="flex flex-col items-center gap-2 group"
+                  >
+                     <div className="w-14 h-14 rounded-full bg-zinc-900 border-2 border-dashed border-zinc-700 flex items-center justify-center text-zinc-500 group-hover:border-emerald-500 group-hover:text-emerald-500 transition-colors">
+                        <Plus className="w-6 h-6" />
+                     </div>
+                     <span className="text-[10px] font-medium text-zinc-500 group-hover:text-zinc-300 transition-colors">Novo</span>
+                  </motion.button>
+                  
                   {conversations
                     .filter(c => c.otherUser && onlineUsers.includes(c.otherUser.id))
-                    .map(conv => (
-                      <button
-                        key={`online-${conv.id}`}
+                    .map((conv, i) => (
+                      <motion.button
+                        key={conv.id}
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: i * 0.1 }}
                         onClick={() => setSelectedConversationId(conv.id)}
-                        className="flex flex-col items-center gap-1"
+                        className="flex flex-col items-center gap-2 group relative"
                       >
-                        <div className="relative p-0.5 rounded-full border-2 border-green-500">
-                          <div className="w-12 h-12 rounded-full bg-muted overflow-hidden border-2 border-background">
+                        <div className="relative">
+                          <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 opacity-0 group-hover:opacity-100 transition-opacity blur-md" />
+                          <div className="relative w-14 h-14 rounded-full bg-zinc-900 overflow-hidden border-2 border-zinc-950 ring-2 ring-emerald-500/50 group-hover:ring-emerald-400 transition-all">
                             {conv.otherUser?.avatar_url ? (
                               <img src={conv.otherUser.avatar_url} alt="" className="w-full h-full object-cover" />
                             ) : (
-                              <div className="w-full h-full flex items-center justify-center bg-primary/10 text-primary font-bold">
+                              <div className="w-full h-full flex items-center justify-center bg-zinc-800 text-zinc-400 font-bold text-lg">
                                 {conv.otherUser?.display_name?.[0]}
                               </div>
                             )}
                           </div>
+                          <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-black z-10" />
                         </div>
-                        <span className="text-[10px] font-medium max-w-[56px] truncate">
+                        <span className="text-[10px] font-medium text-zinc-400 max-w-[64px] truncate group-hover:text-white transition-colors">
                           {conv.otherUser?.display_name?.split(" ")[0]}
                         </span>
-                      </button>
+                      </motion.button>
                     ))}
                 </div>
               </ScrollArea>
@@ -184,11 +211,11 @@ const Messages = () => {
 
         {/* Lista de Conversas */}
         <ScrollArea className="flex-1">
-          <div className="px-2 pt-2 pb-32"> {/* pb-32 garante que o último item não fique atrás do nav */}
+          <div className="px-3 pt-2 pb-32"> {/* pb-32 garante que o último item não fique atrás do nav */}
             {messagesLoading ? (
               <div className="flex flex-col items-center justify-center py-20 gap-3">
-                <Loader2 className="w-6 h-6 animate-spin text-primary/50" />
-                <p className="text-sm text-muted-foreground">Carregando conversas...</p>
+                <Loader2 className="w-8 h-8 animate-spin text-emerald-500/50" />
+                <p className="text-sm text-zinc-500">Carregando conversas...</p>
               </div>
             ) : filteredConversations.length === 0 ? (
               <motion.div
@@ -196,60 +223,68 @@ const Messages = () => {
                 animate={{ opacity: 1, scale: 1 }}
                 className="flex flex-col items-center justify-center py-20 text-center px-6"
               >
-                <div className="w-20 h-20 rounded-3xl bg-muted/50 flex items-center justify-center mb-6">
-                  <MessageSquarePlus className="w-10 h-10 text-muted-foreground" />
+                <div className="w-24 h-24 rounded-3xl bg-zinc-900/50 flex items-center justify-center mb-6 border border-zinc-800">
+                  <MessageSquarePlus className="w-10 h-10 text-zinc-600" />
                 </div>
-                <h3 className="text-lg font-semibold italic">Nenhuma conversa encontrada</h3>
-                <p className="text-sm text-muted-foreground mt-2 mb-8">
+                <h3 className="text-lg font-semibold text-zinc-200">Nenhuma conversa encontrada</h3>
+                <p className="text-sm text-zinc-500 mt-2 mb-8 max-w-[200px]">
                   {searchQuery ? "Tente buscar por um termo diferente." : "Comece a interagir! Suas conversas aparecerão aqui."}
                 </p>
                 {!searchQuery && (
-                  <Button onClick={() => setShowNewConversation(true)} className="rounded-full px-8 shadow-lg shadow-primary/20">
+                  <Button 
+                    onClick={() => setShowNewConversation(true)} 
+                    className="rounded-full px-8 bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20"
+                  >
                     Iniciar Chat
                   </Button>
                 )}
               </motion.div>
             ) : (
-              <div className="space-y-0.5">
-                {filteredConversations.map((conversation, index) => (
-                  <motion.div
-                    key={conversation.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className={cn(
-                      "rounded-2xl transition-colors active:bg-muted/50",
-                      conversation.unreadCount > 0 ? "bg-primary/5" : "bg-transparent"
-                    )}
-                  >
-                    <ChatPreview
-                      id={conversation.id}
-                      displayName={conversation.otherUser?.display_name || "Usuário"}
-                      username={conversation.otherUser?.username || ""}
-                      avatarUrl={conversation.otherUser?.avatar_url}
-                      lastMessage={conversation.lastMessage?.content}
-                      lastMessageTime={conversation.lastMessage?.created_at || conversation.updated_at}
-                      unreadCount={conversation.unreadCount}
-                      isOnline={onlineUsers.includes(conversation.otherUser?.id || "")}
-                      isVerified={conversation.otherUser?.is_verified}
-                      isAudioMessage={!!conversation.lastMessage?.audio_url}
-                      isStickerMessage={!!conversation.lastMessage?.sticker_url}
-                      onClick={() => setSelectedConversationId(conversation.id)}
-                    />
-                  </motion.div>
-                ))}
+              <div className="space-y-1">
+                <AnimatePresence mode="popLayout">
+                  {filteredConversations.map((conversation, index) => (
+                    <motion.div
+                      key={conversation.id}
+                      initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ delay: index * 0.05 }}
+                      className={cn(
+                        "rounded-2xl transition-all duration-300 border border-transparent",
+                        conversation.unreadCount > 0 
+                          ? "bg-zinc-900/60 border-zinc-800/50" 
+                          : "hover:bg-zinc-900/30"
+                      )}
+                    >
+                      <ChatPreview
+                        id={conversation.id}
+                        displayName={conversation.otherUser?.display_name || "Usuário"}
+                        username={conversation.otherUser?.username || ""}
+                        avatarUrl={conversation.otherUser?.avatar_url}
+                        lastMessage={conversation.lastMessage?.content}
+                        lastMessageTime={conversation.lastMessage?.created_at || conversation.updated_at}
+                        unreadCount={conversation.unreadCount}
+                        isOnline={onlineUsers.includes(conversation.otherUser?.id || "")}
+                        isVerified={conversation.otherUser?.is_verified}
+                        isAudioMessage={!!conversation.lastMessage?.audio_url}
+                        isStickerMessage={!!conversation.lastMessage?.sticker_url}
+                        onClick={() => setSelectedConversationId(conversation.id)}
+                      />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </div>
             )}
           </div>
         </ScrollArea>
 
-        {/* Botão Flutuante (FAB) - Ajustado para ficar acima do BottomNav */}
+        {/* Botão Flutuante (FAB) */}
         {!selectedConversationId && (
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.9 }}
             onClick={() => setShowNewConversation(true)}
-            className="fixed bottom-20 right-6 w-14 h-14 rounded-2xl bg-primary text-primary-foreground shadow-xl shadow-primary/30 flex items-center justify-center z-40"
+            className="fixed bottom-24 right-6 w-14 h-14 rounded-2xl bg-emerald-600 text-white shadow-2xl shadow-emerald-900/40 flex items-center justify-center z-40 border border-emerald-500/20"
           >
             <Plus className="w-7 h-7" strokeWidth={2.5} />
           </motion.button>
