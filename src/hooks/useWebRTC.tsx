@@ -524,6 +524,34 @@ export const useWebRTC = () => {
       // 2. Obter mídia local
       const stream = await getUserMedia(callType);
 
+      // PREPARE PARTICIPANT INFO EARLY
+      let otherParticipant: CallParticipant | null = null;
+      if (calleeInfo) {
+          otherParticipant = {
+            id: calleeId,
+            display_name: calleeInfo.displayName,
+            username: calleeInfo.username,
+            avatar_url: calleeInfo.avatarUrl,
+        } as CallParticipant;
+      } else {
+          const { data: profile } = await supabase.from('profiles').select('*').eq('id', calleeId).single();
+          if (profile) otherParticipant = profile as CallParticipant;
+      }
+
+      // SET ACTIVE CALL IMMEDIATELY (For fast UI feedback)
+      setActiveCall({
+        session: session as CallSession,
+        localStream: stream,
+        remoteStream: null,
+        isScreenSharing: false,
+        otherParticipant: otherParticipant,
+        screenStream: null,
+        isAudioEnabled: true,
+        isVideoEnabled: callType === 'video',
+        connectionQuality: null,
+        stats: null
+      });
+
       // 3. Inicializar PeerConnection
       const connection = createPeerConnection(session.id, callType);
       
@@ -550,35 +578,13 @@ export const useWebRTC = () => {
       // 6. Atualizar status para ringing
       await supabase.from('call_sessions').update({ status: 'ringing' }).eq('id', session.id);
 
-      // CORREÇÃO: Usar calleeInfo se disponível, senão buscar do perfil
-      let otherParticipant: CallParticipant | null = null;
-      if (calleeInfo) {
-          otherParticipant = {
-            id: calleeId,
-            display_name: calleeInfo.displayName,
-            username: calleeInfo.username,
-            avatar_url: calleeInfo.avatarUrl,
-        } as CallParticipant;
-      } else {
-          // Fallback: Tentar buscar perfil se não foi passado (raro, mas possível)
-          const { data: profile } = await supabase.from('profiles').select('*').eq('id', calleeId).single();
-          if (profile) otherParticipant = profile as CallParticipant;
-      }
+      // 7. Atualizar status local para ringing
+      setActiveCall(prev => prev ? { 
+          ...prev, 
+          session: { ...prev.session, status: 'ringing' } 
+      } : null);
 
-      setActiveCall({
-        session: session as CallSession,
-        localStream: stream,
-        remoteStream: null,
-        isScreenSharing: false,
-        otherParticipant: otherParticipant,
-        screenStream: null,
-        isAudioEnabled: true,
-        isVideoEnabled: callType === 'video',
-        connectionQuality: null,
-        stats: null
-      });
-
-      // 7. Inscrever nos sinais
+      // 8. Inscrever nos sinais
       subscribeToSignals(session.id);
       
       // Reset flags for new call

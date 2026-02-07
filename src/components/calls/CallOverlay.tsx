@@ -6,25 +6,77 @@ import {
   Video, 
   VideoOff, 
   PhoneOff, 
-  Monitor, 
-  MessageSquare,
   Minimize2,
-  SwitchCamera,
-  Signal,
   Wifi,
   WifiOff,
   Activity,
-  Info
+  PhoneOutgoing
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useCall } from "@/contexts/CallContext";
 import { cn } from "@/lib/utils";
-import { CallChat } from "./CallChat";
 import { MinimizedCall } from "./MinimizedCall";
 import { useAudioAnalyzer } from "@/hooks/useAudioAnalyzer";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { supabase } from "@/integrations/supabase/client";
+
+// Stable Video Component to ensure stream binding
+const VideoElement = ({ 
+  stream, 
+  isLocal, 
+  className, 
+  onLoadedMetadata,
+  ...props 
+}: { 
+  stream: MediaStream | null, 
+  isLocal: boolean, 
+  className?: string,
+  onLoadedMetadata?: (e: React.SyntheticEvent<HTMLVideoElement>) => void
+}) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (stream) {
+      if (video.srcObject !== stream) {
+        // console.log(`🎥 [VideoElement] Attaching ${isLocal ? 'local' : 'remote'} stream (ID: ${stream.id})`);
+        video.srcObject = stream;
+        if (isLocal) {
+          video.muted = true;
+          video.volume = 0;
+        }
+        video.play().catch(e => console.warn("Video play error:", e));
+      }
+    } else {
+      if (video.srcObject) {
+        video.srcObject = null;
+      }
+    }
+  }, [stream, isLocal]);
+
+  return (
+    <video
+      ref={videoRef}
+      className={className}
+      playsInline
+      autoPlay
+      muted={isLocal}
+      onLoadedMetadata={(e) => {
+        if (isLocal) {
+            e.currentTarget.muted = true;
+            e.currentTarget.volume = 0;
+        }
+        e.currentTarget.play().catch(console.warn);
+        onLoadedMetadata?.(e);
+      }}
+      {...props}
+    />
+  );
+};
 
 export const CallOverlay = () => {
   const { 
@@ -32,13 +84,10 @@ export const CallOverlay = () => {
     endCall, 
     toggleAudio, 
     toggleVideo, 
-    toggleScreenShare,
-    switchCamera,
     isConnecting,
     connectionQuality: simpleQuality
   } = useCall();
   
-  const [showChat, setShowChat] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
@@ -46,45 +95,11 @@ export const CallOverlay = () => {
   const [isAdminSpyMode, setIsAdminSpyMode] = useState(false);
   const [remoteMuted, setRemoteMuted] = useState(false);
   
-  const backgroundLocalVideoRef = useRef<HTMLVideoElement>(null);
-  const pipLocalVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
 
-  // Audio Visualization
-  const { audioLevel } = useAudioAnalyzer(activeCall?.remoteStream || null);
-
-  // Helper to attach stream to video element
-  const attachStream = (element: HTMLMediaElement, stream: MediaStream | null, isLocal: boolean = false) => {
-    if (!element) return;
-    
-    if (!stream) {
-      // If stream is null, clear srcObject but don't set it to null if it's already null (avoid flickering)
-      if (element.srcObject) {
-         console.log(`🚫 Clearing stream from ${isLocal ? 'local' : 'remote'} ${element.tagName}`);
-         element.srcObject = null;
-      }
-      return;
-    }
-    
-    // Only update if stream changed or srcObject is null
-    if (element.srcObject !== stream) {
-      console.log(`🎥 Attaching ${isLocal ? 'local' : 'remote'} stream to ${element.tagName} (ID: ${stream.id})`);
-      element.srcObject = stream;
-      if (isLocal) {
-          element.muted = true; // Always mute local video to avoid echo/feedback
-          element.volume = 0;
-      }
-      
-      const playPromise = element.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(e => {
-          console.warn(`⚠️ Error playing ${isLocal ? 'local' : 'remote'} ${element.tagName}:`, e);
-          // Auto-retry play if needed?
-        });
-      }
-    }
-  };
+  // Audio Visualization - Analyze Remote if available, otherwise Local (for user feedback)
+  const visualizationStream = activeCall?.remoteStream || activeCall?.localStream || null;
+  const { audioLevel } = useAudioAnalyzer(visualizationStream);
 
   // Subscribe to signals for Mute state
   useEffect(() => {
@@ -104,7 +119,7 @@ export const CallOverlay = () => {
           filter: `call_id=eq.${activeCall.session.id}`
       }, (payload) => {
           const signal = payload.new;
-          if (signal.sender_id !== activeCall.session.caller_id && signal.sender_id !== activeCall.session.callee_id) return; // ignore unknown?
+          if (signal.sender_id !== activeCall.session.caller_id && signal.sender_id !== activeCall.session.callee_id) return;
           if (signal.sender_id === activeCall.otherParticipant?.id) {
              if (signal.signal_type === 'audio-state-change') {
                 setRemoteMuted(signal.signal_data.muted);
@@ -116,63 +131,23 @@ export const CallOverlay = () => {
     return () => {
         supabase.removeChannel(channel);
     };
-  }, [activeCall?.session.id]); // Re-run only on call ID change
+  }, [activeCall?.session.id]);
 
   // Handle Mute logic on remote elements
   useEffect(() => {
-      // If remote is muted, we mute the element UNLESS we are in Spy Mode
       const shouldMute = remoteMuted && !isAdminSpyMode;
-      
-      if (remoteVideoRef.current) remoteVideoRef.current.muted = shouldMute;
       if (remoteAudioRef.current) remoteAudioRef.current.muted = shouldMute;
-      
   }, [remoteMuted, isAdminSpyMode, activeCall?.remoteStream]);
 
-  // Callback refs to handle dynamic mounting/unmounting
-  const setBackgroundLocalVideoRef = useCallback((node: HTMLVideoElement | null) => {
-    backgroundLocalVideoRef.current = node;
-    if (node && activeCall?.localStream) {
-      attachStream(node, activeCall.localStream, true);
-    }
-  }, [activeCall?.localStream]);
-
-  const setPipLocalVideoRef = useCallback((node: HTMLVideoElement | null) => {
-    pipLocalVideoRef.current = node;
-    if (node && activeCall?.localStream) {
-      attachStream(node, activeCall.localStream, true);
-    }
-  }, [activeCall?.localStream]);
-
-  const setRemoteVideoRef = useCallback((node: HTMLVideoElement | null) => {
-    remoteVideoRef.current = node;
-    if (node && activeCall?.remoteStream) {
-      attachStream(node, activeCall.remoteStream, false);
-    }
-  }, [activeCall?.remoteStream]);
-
-  const setRemoteAudioRef = useCallback((node: HTMLAudioElement | null) => {
-    remoteAudioRef.current = node;
-    if (node && activeCall?.remoteStream) {
-      attachStream(node, activeCall.remoteStream, false);
-    }
-  }, [activeCall?.remoteStream]);
-
-  // Ensure streams are re-attached if activeCall changes while refs are stable
+  // Attach Remote Audio
   useEffect(() => {
-    if (backgroundLocalVideoRef.current && activeCall?.localStream) {
-        attachStream(backgroundLocalVideoRef.current, activeCall.localStream, true);
-    }
-    if (pipLocalVideoRef.current && activeCall?.localStream) {
-        attachStream(pipLocalVideoRef.current, activeCall.localStream, true);
-    }
-    if (remoteVideoRef.current && activeCall?.remoteStream) {
-        attachStream(remoteVideoRef.current, activeCall.remoteStream, false);
-    }
     if (remoteAudioRef.current && activeCall?.remoteStream) {
-        attachStream(remoteAudioRef.current, activeCall.remoteStream, false);
+        if (remoteAudioRef.current.srcObject !== activeCall.remoteStream) {
+            remoteAudioRef.current.srcObject = activeCall.remoteStream;
+            remoteAudioRef.current.play().catch(console.warn);
+        }
     }
-  }, [activeCall?.localStream, activeCall?.remoteStream, isMinimized]);
-
+  }, [activeCall?.remoteStream]);
 
   // Call duration timer
   useEffect(() => {
@@ -209,6 +184,16 @@ export const CallOverlay = () => {
   const isVideoCall = activeCall.session.call_type === 'video';
   const isConnected = activeCall.session.status === 'connected';
   const isRinging = activeCall.session.status === 'ringing' || activeCall.session.status === 'initiating';
+  
+  // Determine what to show as the main background
+  // 1. If we have remote video -> Show Remote
+  // 2. If no remote video, but we have local video (waiting/ringing) -> Show Local (mirrored)
+  // 3. Otherwise -> Show dark background
+  const hasRemoteVideo = isVideoCall && !!activeCall.remoteStream && activeCall.remoteStream.getVideoTracks().length > 0;
+  const hasLocalVideo = isVideoCall && !!activeCall.localStream && activeCall.localStream.getVideoTracks().length > 0;
+  
+  // If we are showing local video as background (during ring), we don't need the avatar overlay to be opaque
+  const showVideoBackground = hasRemoteVideo || hasLocalVideo;
 
   if (isMinimized) {
     return (
@@ -224,142 +209,145 @@ export const CallOverlay = () => {
   return (
     <div className="fixed inset-0 z-[100] bg-zinc-950 flex flex-col font-sans">
         {/* Main Content Area */}
-        <div className="relative flex-1 w-full overflow-hidden">
+        <div className="relative flex-1 w-full overflow-hidden flex flex-col">
           
-          {/* Background Effects */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/20 to-black/80 z-10 pointer-events-none" />
+          {/* LAYER 0: Video Background */}
+          <div className="absolute inset-0 z-0">
+             {hasRemoteVideo ? (
+               <VideoElement 
+                 stream={activeCall.remoteStream} 
+                 isLocal={false} 
+                 className="w-full h-full object-cover"
+               />
+             ) : hasLocalVideo ? (
+               <VideoElement 
+                 stream={activeCall.localStream} 
+                 isLocal={true} 
+                 className="w-full h-full object-cover transform -scale-x-100"
+               />
+             ) : (
+                // Fallback for Audio Calls or Missing Video
+                <div className="w-full h-full bg-zinc-900" />
+             )}
+          </div>
 
-          {/* Remote Video (Full Screen) OR Local Video (Background during call setup) */}
-          {isVideoCall && activeCall.remoteStream ? (
-            <video
-              ref={setRemoteVideoRef}
-              autoPlay
-              playsInline
-              className="absolute inset-0 w-full h-full object-cover z-0"
-              onLoadedMetadata={(e) => e.currentTarget.play()}
-            />
-          ) : isVideoCall && activeCall.localStream ? (
-            <video
-              ref={setBackgroundLocalVideoRef}
-              autoPlay
-              playsInline
-              muted
-              className="absolute inset-0 w-full h-full object-cover transform -scale-x-100 z-0" 
-              onLoadedMetadata={(e) => {
-                  e.currentTarget.muted = true;
-                  e.currentTarget.play();
-              }}
-            />
-          ) : null}
+          {/* LAYER 1: Gradient Overlay (visibility depends on context) */}
+          <div className={cn(
+             "absolute inset-0 pointer-events-none transition-colors duration-500",
+             showVideoBackground ? "bg-black/20" : "bg-zinc-900" // Use lighter overlay if video is showing
+          )} />
 
-          {/* Avatar & Status Overlay */}
-          {(!isVideoCall || !activeCall.remoteStream) && (
-            <div className={cn(
-              "absolute inset-0 z-10 flex flex-col items-center justify-center",
-              (isVideoCall && activeCall.localStream) ? "bg-black/40 backdrop-blur-sm" : "bg-zinc-900"
-            )}>
-               {/* Hidden Audio Element for Voice Calls */}
-               {activeCall.remoteStream && (
-                 <audio 
-                    ref={setRemoteAudioRef} 
-                    autoPlay 
-                    playsInline 
-                    controls={false} 
-                    className="hidden" 
-                    onLoadedMetadata={(e) => e.currentTarget.play()}
-                 />
-               )}
-
-               {/* Pulsing Effect based on Audio Level */}
-               {isConnected && (
+          {/* LAYER 2: Avatar & Status Info */}
+          {/* Only show full avatar overlay if:
+              1. It's an Audio Call
+              2. OR We are waiting for connection AND we don't have local video to show (e.g. permission issue)
+              3. OR We are connected but remote has no video (handled by hasRemoteVideo check above)
+           */}
+          {(!showVideoBackground || !isConnected) && (
+             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-4">
+                
+                {/* Audio Visualization Ring */}
+                {isConnected && !hasRemoteVideo && (
                   <motion.div
-                    className="absolute w-48 h-48 rounded-full bg-green-500/20 blur-xl"
+                    className="absolute w-64 h-64 rounded-full bg-primary/20 blur-3xl"
                     animate={{
                       scale: 1 + (audioLevel / 50),
                       opacity: 0.3 + (audioLevel / 200)
                     }}
                     transition={{ type: "spring", stiffness: 300, damping: 20 }}
                   />
-               )}
+                )}
 
-               {/* Ringing Animation */}
-              {(isRinging || isConnecting) && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  {[1, 2, 3].map((i) => (
-                    <motion.div
-                      key={i}
-                      className="absolute w-40 h-40 rounded-full border border-primary/30"
-                      initial={{ scale: 0.8, opacity: 0.5 }}
-                      animate={{ 
-                        scale: [0.8, 2 + i * 0.5], 
-                        opacity: [0.5, 0] 
-                      }}
-                      transition={{
-                        duration: 2.5,
-                        repeat: Infinity,
-                        delay: i * 0.6,
-                        ease: "easeOut"
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
+                {/* Ringing Ripples */}
+                {isRinging && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    {[1, 2, 3].map((i) => (
+                      <motion.div
+                        key={i}
+                        className="absolute w-48 h-48 rounded-full border border-primary/20"
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ 
+                          scale: [0.8, 2.5], 
+                          opacity: [0.5, 0] 
+                        }}
+                        transition={{
+                          duration: 2,
+                          repeat: Infinity,
+                          delay: i * 0.6,
+                          ease: "easeOut"
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
 
-              <Avatar className="w-32 h-32 border-4 border-zinc-800 shadow-2xl z-10">
-                <AvatarImage src={activeCall.otherParticipant?.avatar_url || undefined} />
-                <AvatarFallback className="text-4xl bg-zinc-800 text-white">
-                  {(activeCall.otherParticipant?.display_name || "U")[0].toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              
-              <div className="mt-8 text-center z-10">
-                <h2 className="text-3xl font-bold text-white mb-2 tracking-tight">
-                  {activeCall.otherParticipant?.display_name || "Usuário"}
-                </h2>
-                <div className="flex items-center justify-center gap-2">
-                    {isRinging ? (
-                         <span className="text-zinc-400 text-lg animate-pulse">Chamando...</span>
-                    ) : isConnecting ? (
-                         <span className="text-zinc-400 text-lg animate-pulse">Conectando...</span>
-                    ) : (
-                        <Badge variant="outline" className="bg-zinc-800/50 border-zinc-700 text-zinc-300 px-3 py-1 text-sm font-mono">
-                            {formatDuration(callDuration)}
-                        </Badge>
-                    )}
+                <Avatar className={cn(
+                    "border-4 border-zinc-800 shadow-2xl z-20 transition-all duration-500",
+                    showVideoBackground ? "w-24 h-24 mb-4" : "w-32 h-32 mb-6" // Shrink avatar if video is background (e.g. local preview)
+                )}>
+                  <AvatarImage src={activeCall.otherParticipant?.avatar_url || undefined} />
+                  <AvatarFallback className="text-3xl bg-zinc-800 text-white">
+                    {(activeCall.otherParticipant?.display_name || "U")[0].toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                
+                <div className="text-center z-20">
+                  <h2 className="text-2xl font-bold text-white mb-2 tracking-tight drop-shadow-md">
+                    {activeCall.otherParticipant?.display_name || "Usuário"}
+                  </h2>
+                  <div className="flex items-center justify-center gap-2 min-h-[24px]">
+                      {isRinging ? (
+                           <span className="text-zinc-200 text-base font-medium animate-pulse flex items-center gap-2">
+                             <PhoneOutgoing className="w-4 h-4" /> Chamando...
+                           </span>
+                      ) : isConnecting ? (
+                           <span className="text-zinc-200 text-base font-medium animate-pulse flex items-center gap-2">
+                             <Activity className="w-4 h-4" /> Conectando...
+                           </span>
+                      ) : (
+                          <Badge variant="secondary" className="bg-black/40 hover:bg-black/60 text-white border-white/10 backdrop-blur-md px-3 py-1 font-mono">
+                              {formatDuration(callDuration)}
+                          </Badge>
+                      )}
+                  </div>
                 </div>
-              </div>
-            </div>
+             </div>
           )}
 
-          {/* Local Video (PiP) */}
-          {isVideoCall && activeCall.localStream && activeCall.remoteStream && (
+          {/* LAYER 3: PiP Local Video (Only when connected and remote video is active) */}
+          {hasRemoteVideo && hasLocalVideo && (
              <motion.div 
                drag
                dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
                whileHover={{ scale: 1.05 }}
                whileTap={{ scale: 0.95 }}
-               className="absolute top-4 right-4 w-32 h-48 bg-zinc-900 rounded-2xl overflow-hidden border-2 border-zinc-700/50 shadow-2xl z-20 cursor-move"
+               className="absolute top-4 right-4 w-32 h-48 bg-zinc-900 rounded-2xl overflow-hidden border-2 border-white/10 shadow-2xl z-30 cursor-move"
              >
-                <video
-                  ref={setPipLocalVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
+                <VideoElement 
+                  stream={activeCall.localStream} 
+                  isLocal={true} 
                   className="w-full h-full object-cover transform -scale-x-100"
-                  onLoadedMetadata={(e) => {
-                      e.currentTarget.muted = true;
-                      e.currentTarget.play();
-                  }}
                 />
              </motion.div>
           )}
+          
+          {/* Hidden Remote Audio Element */}
+          {activeCall.remoteStream && (
+             <audio 
+                ref={remoteAudioRef} 
+                autoPlay 
+                playsInline 
+                controls={false} 
+                className="hidden" 
+             />
+          )}
 
           {/* Top Bar (Quality & Minimize) */}
-          <div className="absolute top-6 left-6 flex items-center gap-3 z-20">
+          <div className="absolute top-6 left-6 flex items-center gap-3 z-30">
              <Button 
-                variant="outline" 
+                variant="ghost" 
                 size="icon" 
-                className="rounded-full bg-black/20 backdrop-blur border-white/10 text-white hover:bg-black/40"
+                className="rounded-full bg-black/20 backdrop-blur-md border border-white/10 text-white hover:bg-black/40"
                 onClick={() => setIsMinimized(true)}
              >
                 <Minimize2 className="w-5 h-5" />
@@ -368,7 +356,7 @@ export const CallOverlay = () => {
              {isConnected && (
                 <Popover>
                     <PopoverTrigger asChild>
-                        <Button variant="ghost" className="h-10 px-3 rounded-full bg-black/20 backdrop-blur border border-white/10 text-white hover:bg-black/40 gap-2">
+                        <Button variant="ghost" className="h-10 px-3 rounded-full bg-black/20 backdrop-blur-md border border-white/10 text-white hover:bg-black/40 gap-2">
                              {simpleQuality === 'good' ? (
                                  <Wifi className="w-4 h-4 text-green-500" />
                              ) : simpleQuality === 'poor' ? (
@@ -376,9 +364,6 @@ export const CallOverlay = () => {
                              ) : (
                                  <WifiOff className="w-4 h-4 text-red-500" />
                              )}
-                             <span className="text-xs font-medium">
-                                {simpleQuality === 'good' ? 'Estável' : 'Instável'}
-                             </span>
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-64 bg-zinc-900/95 border-zinc-800 text-zinc-200 backdrop-blur-xl p-4" align="start">
@@ -387,20 +372,19 @@ export const CallOverlay = () => {
                                 <Activity className="w-4 h-4" /> Estatísticas da Rede
                             </h4>
                             
-                            {/* Admin Spy Toggle */}
                             <div className="flex items-center justify-between bg-red-900/20 p-2 rounded border border-red-900/50">
-                                <span className="text-xs font-mono text-red-400">MODO ESCUTA (ADMIN)</span>
+                                <span className="text-xs font-mono text-red-400">MODO ESCUTA</span>
                                 <Button 
                                     size="sm" 
                                     variant={isAdminSpyMode ? "destructive" : "outline"}
                                     className="h-6 text-[10px] px-2"
                                     onClick={() => setIsAdminSpyMode(!isAdminSpyMode)}
                                 >
-                                    {isAdminSpyMode ? "ATIVADO" : "DESATIVADO"}
+                                    {isAdminSpyMode ? "ON" : "OFF"}
                                 </Button>
                             </div>
 
-                            {activeCall.connectionQuality ? (
+                            {activeCall.connectionQuality && (
                                 <div className="grid grid-cols-2 gap-2 text-xs">
                                     <div className="bg-black/40 p-2 rounded">
                                         <div className="text-zinc-500 mb-1">Ping</div>
@@ -410,13 +394,7 @@ export const CallOverlay = () => {
                                         <div className="text-zinc-500 mb-1">Perda</div>
                                         <div className="font-mono text-blue-400">{activeCall.connectionQuality.packetLoss.toFixed(1)}%</div>
                                     </div>
-                                    <div className="bg-black/40 p-2 rounded col-span-2">
-                                        <div className="text-zinc-500 mb-1">Status ICE</div>
-                                        <div className="font-mono capitalize">{activeCall.connectionQuality.rating}</div>
-                                    </div>
                                 </div>
-                            ) : (
-                                <p className="text-xs text-zinc-500">Coletando dados...</p>
                             )}
                         </div>
                     </PopoverContent>
@@ -426,11 +404,10 @@ export const CallOverlay = () => {
         </div>
 
         {/* Bottom Control Bar */}
-        <div className="relative z-30 bg-zinc-900/80 backdrop-blur-2xl border-t border-white/5 p-6 pb-8 safe-area-pb">
-           <div className="flex items-center justify-center gap-4 sm:gap-8 max-w-lg mx-auto">
+        <div className="relative z-40 bg-zinc-950/80 backdrop-blur-xl border-t border-white/5 p-6 pb-8 safe-area-pb">
+           <div className="flex items-center justify-center gap-6 sm:gap-10 max-w-lg mx-auto">
               
-              {/* Mute Toggle */}
-              <div className="flex flex-col items-center gap-1">
+              <div className="flex flex-col items-center gap-2">
                 <Button
                     variant="outline"
                     size="icon"
@@ -442,12 +419,11 @@ export const CallOverlay = () => {
                 >
                     {isAudioEnabled ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
                 </Button>
-                <span className="text-[10px] text-zinc-400 font-medium">Mute</span>
+                <span className="text-[10px] text-zinc-400 font-medium">Microfone</span>
               </div>
 
-              {/* Video Toggle */}
               {isVideoCall && (
-                <div className="flex flex-col items-center gap-1">
+                <div className="flex flex-col items-center gap-2">
                     <Button
                     variant="outline"
                     size="icon"
@@ -459,62 +435,22 @@ export const CallOverlay = () => {
                     >
                     {isVideoEnabled ? <Video className="w-6 h-6" /> : <VideoOff className="w-6 h-6" />}
                     </Button>
-                    <span className="text-[10px] text-zinc-400 font-medium">Camera</span>
+                    <span className="text-[10px] text-zinc-400 font-medium">Câmera</span>
                 </div>
               )}
 
-              {/* End Call (Center, Large) */}
-              <div className="flex flex-col items-center gap-1 mx-2">
+              <div className="flex flex-col items-center gap-2 mx-2">
                 <Button
                     variant="destructive"
                     size="icon"
-                    className="w-20 h-20 rounded-full shadow-red-900/20 shadow-xl bg-red-500 hover:bg-red-600 border-4 border-zinc-900 transition-transform hover:scale-105 active:scale-95"
+                    className="w-20 h-20 rounded-full shadow-red-900/20 shadow-xl bg-red-500 hover:bg-red-600 border-4 border-zinc-950 transition-transform hover:scale-105 active:scale-95"
                     onClick={endCall}
                 >
                     <PhoneOff className="w-9 h-9 text-white fill-current" />
                 </Button>
               </div>
-
-              {/* Switch Camera */}
-              {isVideoCall && (
-                <div className="flex flex-col items-center gap-1">
-                    <Button
-                    variant="ghost"
-                    size="icon"
-                    className="w-14 h-14 rounded-full bg-zinc-800 hover:bg-zinc-700 text-white border-0 transition-all duration-300 shadow-lg"
-                    onClick={switchCamera}
-                    >
-                    <SwitchCamera className="w-6 h-6" />
-                    </Button>
-                    <span className="text-[10px] text-zinc-400 font-medium">Virar</span>
-                </div>
-              )}
-
-              {/* Chat Toggle */}
-              <div className="flex flex-col items-center gap-1">
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className={cn(
-                    "w-14 h-14 rounded-full bg-zinc-800 hover:bg-zinc-700 text-white border-0 transition-all duration-300 shadow-lg",
-                    showChat && "bg-blue-600 text-white hover:bg-blue-700 ring-2 ring-blue-400/50"
-                    )}
-                    onClick={() => setShowChat(!showChat)}
-                >
-                    <MessageSquare className="w-6 h-6" />
-                </Button>
-                <span className="text-[10px] text-zinc-400 font-medium">Chat</span>
-              </div>
            </div>
         </div>
-
-        {/* Chat Drawer/Overlay */}
-          <CallChat 
-            conversationId={activeCall.session.conversation_id}
-            isOpen={showChat}
-            onClose={() => setShowChat(false)}
-          />
-
     </div>
   );
 };
