@@ -456,6 +456,13 @@ export const useWebRTC = () => {
           cleanup();
           toast.info("Chamada encerrada.");
           break;
+
+        case 'audio-state-change':
+          // Update remote participant state if needed
+          // Ideally we update activeCall state so UI can react
+          console.log(`🎤 Remote audio changed: ${signal.signal_data.muted ? 'Muted' : 'Unmuted'}`);
+          // We could store this in activeCall.otherParticipantState or similar if we extended the type
+          break;
           
         case 'screen-share-start':
           setActiveCall(prev => prev ? { ...prev, isScreenSharing: true } : null);
@@ -798,10 +805,10 @@ export const useWebRTC = () => {
 
   const toggleAudio = useCallback(async () => {
     if (localStreamRef.current && activeCall) {
-      // Soft Mute: Don't disable track, just send signal to mute UI on other side
-      // localStreamRef.current.getAudioTracks().forEach(track => {
-      //   track.enabled = !track.enabled;
-      // });
+      // Toggle actual audio tracks
+      localStreamRef.current.getAudioTracks().forEach(track => {
+        track.enabled = !track.enabled;
+      });
       
       const newAudioState = !activeCall.isAudioEnabled;
       

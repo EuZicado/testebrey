@@ -10,13 +10,15 @@ import {
   Wifi,
   WifiOff,
   Activity,
-  PhoneOutgoing
+  PhoneOutgoing,
+  MessageSquare
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useCall } from "@/contexts/CallContext";
 import { cn } from "@/lib/utils";
 import { MinimizedCall } from "./MinimizedCall";
+import { CallChat } from "./CallChat";
 import { useAudioAnalyzer } from "@/hooks/useAudioAnalyzer";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -93,6 +95,7 @@ export const CallOverlay = () => {
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isAdminSpyMode, setIsAdminSpyMode] = useState(false);
   const [remoteMuted, setRemoteMuted] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
 
@@ -364,6 +367,18 @@ export const CallOverlay = () => {
                 <Minimize2 className="w-5 h-5" />
              </Button>
 
+             <Button 
+                variant="ghost" 
+                size="icon" 
+                className={cn(
+                  "w-10 h-10 rounded-full backdrop-blur-xl border border-white/10 transition-colors",
+                  isChatOpen ? "bg-blue-500/20 text-blue-400 border-blue-500/30" : "bg-black/20 text-white hover:bg-black/40"
+                )}
+                onClick={() => setIsChatOpen(!isChatOpen)}
+             >
+                <MessageSquare className="w-5 h-5" />
+             </Button>
+
              {isConnected && (
                 <Popover>
                     <PopoverTrigger asChild>
@@ -468,6 +483,12 @@ export const CallOverlay = () => {
               </div>
            </div>
         </div>
+        
+        <CallChat 
+          conversationId={activeCall.session.conversation_id}
+          isOpen={isChatOpen}
+          onClose={() => setIsChatOpen(false)}
+        />
     </div>
   );
 };
