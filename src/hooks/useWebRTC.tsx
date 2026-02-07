@@ -320,12 +320,12 @@ export const useWebRTC = () => {
     connection.oniceconnectionstatechange = () => {
       console.log("🧊 ICE State:", connection.iceConnectionState);
       if (connection.iceConnectionState === 'disconnected') {
-        toast.warning("Reconectando...", { duration: 2000 });
-        // Auto-reconnect (ICE Restart) could be triggered here if needed
-        // connection.restartIce(); // Usually handled via negotiation
+        // Apenas loga, não mostra toast para não incomodar
+        console.warn("ICE Disconnected - attempting recovery implicitly via negotiation or restart");
       } else if (connection.iceConnectionState === 'failed') {
         setConnectionQuality('bad');
-        toast.error("Conexão instável.");
+        console.error("ICE Failed - Connection unstable");
+        // Não mostrar toast aqui, usar apenas o indicador visual
       }
     };
 
@@ -379,9 +379,25 @@ export const useWebRTC = () => {
       }
       
       if (state === 'failed') {
-          // Tentar reiniciar ICE
-          console.log("⚠️ Conexão falhou. Tentando restart ICE...");
-          connection.restartIce();
+          // Tentar reiniciar ICE corretamente com renegociação
+          console.log("⚠️ Conexão falhou. Iniciando ICE Restart...");
+          if (pc.current && user) {
+             // ICE Restart requer criar uma nova oferta com iceRestart: true
+             pc.current.createOffer({ iceRestart: true })
+               .then(async (offer) => {
+                 if (!pc.current) return;
+                 await pc.current.setLocalDescription(offer);
+                 
+                 // Enviar nova oferta
+                 await supabase.from('call_signals').insert({
+                    call_id: callId,
+                    sender_id: user.id,
+                    signal_type: 'offer',
+                    signal_data: offer as unknown as Record<string, unknown>
+                 });
+               })
+               .catch(e => console.error("Erro ao reiniciar ICE:", e));
+          }
       }
       
       if (state === 'closed') {
