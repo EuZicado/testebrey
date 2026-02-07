@@ -27,13 +27,25 @@ export const useWebRTC = () => {
 
     const channel = supabase.channel('incoming_calls')
       .on('postgres_changes', {
-        event: 'INSERT',
+        event: '*', // Listen to ALL events (INSERT and UPDATE)
         schema: 'public',
         table: 'call_sessions',
         filter: `callee_id=eq.${user.id}`
       }, async (payload) => {
         const session = payload.new as CallSession;
-        if (session.status === 'initiating' || session.status === 'ringing') {
+        
+        // Ignore 'initiating' status to prevent race conditions (wait for Offer)
+        // Only show call when status is 'ringing' (Offer is ready)
+        if (session.status === 'ringing') {
+          // Check if we already have this call (to avoid duplicates on updates)
+          setIncomingCall(prev => {
+             if (prev && prev.session.id === session.id) return prev;
+             
+             // If we are already in a call, maybe ignore or show waiting?
+             // For now, let's just proceed.
+             return prev;
+          });
+
           // Buscar dados do chamador
           const { data: caller } = await supabase
             .from('profiles')
@@ -49,6 +61,12 @@ export const useWebRTC = () => {
             
             // Tocar som (será tratado pelo CallContext)
           }
+        } else if (['ended', 'missed', 'declined', 'rejected'].includes(session.status)) {
+             // Handle cancellation via this channel too (redundancy is fine)
+             setIncomingCall(prev => {
+                 if (prev && prev.session.id === session.id) return null;
+                 return prev;
+             });
         }
       })
       .subscribe();
@@ -695,7 +713,8 @@ export const useWebRTC = () => {
     } catch (e) {
         console.error("Erro ao atender:", e);
         cleanup();
-        toast.error("Erro ao atender chamada.");
+        const err = e as Error;
+        toast.error(`Erro ao atender chamada: ${err.message || 'Desconhecido'}`);
     }
   }, [incomingCall, user, getUserMedia, createPeerConnection, cleanup, subscribeToSignals, processIceQueue]);
 
