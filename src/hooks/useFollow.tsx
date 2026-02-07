@@ -60,10 +60,21 @@ export const useFollow = (targetUserId?: string) => {
           .eq("following_id", targetUserId);
 
         // Update counts
-        await supabase
+        // Note: Updating own profile counts client-side is risky without current state.
+        // Best practice is to use DB triggers. For now, we will fetch current count first.
+        
+        const { data: currentUserProfile } = await supabase
           .from("profiles")
-          .update({ following_count: Math.max(0, followingCount - 1) })
-          .eq("id", user.id);
+          .select("following_count")
+          .eq("id", user.id)
+          .single();
+
+        if (currentUserProfile) {
+           await supabase
+            .from("profiles")
+            .update({ following_count: Math.max(0, (currentUserProfile.following_count || 0) - 1) })
+            .eq("id", user.id);
+        }
 
         await supabase
           .from("profiles")
@@ -80,10 +91,18 @@ export const useFollow = (targetUserId?: string) => {
         });
 
         // Update counts
-        await supabase
+        const { data: currentUserProfile } = await supabase
           .from("profiles")
-          .update({ following_count: followingCount + 1 })
-          .eq("id", user.id);
+          .select("following_count")
+          .eq("id", user.id)
+          .single();
+
+        if (currentUserProfile) {
+            await supabase
+              .from("profiles")
+              .update({ following_count: (currentUserProfile.following_count || 0) + 1 })
+              .eq("id", user.id);
+        }
 
         await supabase
           .from("profiles")

@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { ActiveCall, IncomingCall, ICE_SERVERS, CallType, CallMessage, CallStats, ConnectionQuality, CallSession, CallParticipant, CallSignal } from "@/types/calls";
 import { toast } from "sonner";
+import { useCallSounds } from "./useCallSounds";
 
 export const useWebRTC = () => {
   const { user } = useAuth();
@@ -12,6 +13,8 @@ export const useWebRTC = () => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionQuality, setConnectionQuality] = useState<'good' | 'poor' | 'bad'>('good');
   
+  const { playRingtone, playConnecting, playBusy, playEnded, stopAllSounds } = useCallSounds();
+
   const pc = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
@@ -21,89 +24,10 @@ export const useWebRTC = () => {
   const callChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Escutar chamadas recebidas
-  useEffect(() => {
-    if (!user) return;
-
-    const channel = supabase.channel('incoming_calls')
-      .on('postgres_changes', {
-        event: '*', // Listen to ALL events (INSERT and UPDATE)
-        schema: 'public',
-        table: 'call_sessions',
-        filter: `callee_id=eq.${user.id}`
-      }, async (payload) => {
-        const session = payload.new as CallSession;
-        
-        // Ignore 'initiating' status to prevent race conditions (wait for Offer)
-        // Only show call when status is 'ringing' (Offer is ready)
-        if (session.status === 'ringing') {
-          // Check if we already have this call (to avoid duplicates on updates)
-          setIncomingCall(prev => {
-             if (prev && prev.session.id === session.id) return prev;
-             
-             // If we are already in a call, maybe ignore or show waiting?
-             // For now, let's just proceed.
-             return prev;
-          });
-
-          // Buscar dados do chamador
-          const { data: caller } = await supabase
-            .from('profiles')
-            .select('id, username, display_name, avatar_url')
-            .eq('id', session.caller_id)
-            .single();
-
-          if (caller) {
-            setIncomingCall({
-              session,
-              caller: caller as CallParticipant
-            });
-            
-            // Tocar som (será tratado pelo CallContext)
-          }
-        } else if (['ended', 'missed', 'declined', 'rejected'].includes(session.status)) {
-             // Handle cancellation via this channel too (redundancy is fine)
-             setIncomingCall(prev => {
-                 if (prev && prev.session.id === session.id) return null;
-                 return prev;
-             });
-        }
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user]);
-
-  // Monitorar status da chamada recebida (cancelar se o chamador desligar)
-  useEffect(() => {
-    if (!incomingCall) return;
-
-    const channel = supabase.channel(`incoming_status:${incomingCall.session.id}`)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'call_sessions',
-        filter: `id=eq.${incomingCall.session.id}`
-      }, (payload) => {
-        const newStatus = payload.new.status;
-        if (['ended', 'missed', 'declined', 'rejected'].includes(newStatus)) {
-           console.log("Chamada cancelada remotamente:", newStatus);
-           setIncomingCall(null);
-           toast.info("Chamada encerrada.");
-        }
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [incomingCall]);
-
-  // Cleanup completo - libera câmera/microfone
+  // Cleanup completo - libera câmera/microfone e para sons
   const cleanup = useCallback(async () => {
-    console.log("🧹 Limpando conexão WebRTC...");
+    console.log("🧹 Limpando conexão WebRTC e sons...");
+    stopAllSounds();
     isDescriptionSet.current = false;
     candidatesQueue.current = [];
     
@@ -120,7 +44,6 @@ export const useWebRTC = () => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => {
         track.stop();
-        console.log(`📴 Track ${track.kind} parado`);
       });
       localStreamRef.current = null;
     }
@@ -144,7 +67,124 @@ export const useWebRTC = () => {
     setIsConnecting(false);
     setIncomingCall(null);
     setCallMessages([]);
-  }, []);
+  }, [stopAllSounds]);
+
+  // Handle page unload to close active calls
+  useEffect(() => {
+    const handleBeforeUnload = async () => {
+        if (activeCall) {
+            // Attempt to send hangup signal before leaving
+            // Note: This is best-effort as async fetch might be cancelled
+            const { error } = await supabase.from('call_sessions')
+                .update({ status: 'ended', ended_at: new Date().toISOString() })
+                .eq('id', activeCall.session.id);
+        }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [activeCall]);
+
+
+  // Escutar chamadas recebidas
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase.channel('incoming_calls')
+      .on('postgres_changes', {
+        event: '*', // Listen to ALL events (INSERT and UPDATE)
+        schema: 'public',
+        table: 'call_sessions',
+        filter: `callee_id=eq.${user.id}`
+      }, async (payload) => {
+        const session = payload.new as CallSession;
+        
+        // Se status for 'pending' (novo padrão) ou 'ringing', mostramos a chamada
+        if (session.status === 'ringing' || session.status === 'pending') {
+          // Se já estamos em uma chamada, rejeita a nova como ocupado
+          if (activeCall) {
+             console.log("🚫 Usuário já em chamada. Rejeitando nova chamada como ocupado.");
+             
+             // Enviar status de ocupado
+             await supabase.from('call_sessions')
+                 .update({ status: 'busy', ended_at: new Date().toISOString() })
+                 .eq('id', session.id);
+                 
+             // Enviar sinal explícito (redundância)
+             await supabase.from('call_signals').insert({
+                 call_id: session.id,
+                 sender_id: user.id,
+                 signal_type: 'busy',
+                 signal_data: {}
+             });
+             return;
+          }
+
+          // Check if we already have this call
+          setIncomingCall(prev => {
+             if (prev && prev.session.id === session.id) return prev;
+             return prev;
+          });
+
+          // Buscar dados do chamador
+          const { data: caller } = await supabase
+            .from('profiles')
+            .select('id, username, display_name, avatar_url')
+            .eq('id', session.caller_id)
+            .single();
+
+          if (caller) {
+            setIncomingCall({
+              session,
+              caller: caller as CallParticipant
+            });
+            
+            playRingtone();
+          }
+        } else if (['ended', 'missed', 'declined', 'rejected', 'busy'].includes(session.status)) {
+             setIncomingCall(prev => {
+                 if (prev && prev.session.id === session.id) {
+                     stopAllSounds();
+                     return null;
+                 }
+                 return prev;
+             });
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, activeCall, playRingtone, stopAllSounds]);
+
+  // Monitorar status da chamada recebida (cancelar se o chamador desligar)
+  useEffect(() => {
+    if (!incomingCall) return;
+
+    const channel = supabase.channel(`incoming_status:${incomingCall.session.id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'call_sessions',
+        filter: `id=eq.${incomingCall.session.id}`
+      }, (payload) => {
+        const newStatus = payload.new.status;
+        if (['ended', 'missed', 'declined', 'rejected', 'busy'].includes(newStatus)) {
+           console.log("Chamada cancelada remotamente:", newStatus);
+           setIncomingCall(null);
+           stopAllSounds();
+           if (newStatus === 'missed') toast.info("Chamada perdida.");
+           else toast.info("Chamada encerrada.");
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [incomingCall, stopAllSounds]);
+
 
   // getUserMedia com constraints adaptativas e fallback
   const getUserMedia = useCallback(async (type: CallType) => {
@@ -320,12 +360,10 @@ export const useWebRTC = () => {
     connection.oniceconnectionstatechange = () => {
       console.log("🧊 ICE State:", connection.iceConnectionState);
       if (connection.iceConnectionState === 'disconnected') {
-        // Apenas loga, não mostra toast para não incomodar
         console.warn("ICE Disconnected - attempting recovery implicitly via negotiation or restart");
       } else if (connection.iceConnectionState === 'failed') {
         setConnectionQuality('bad');
         console.error("ICE Failed - Connection unstable");
-        // Não mostrar toast aqui, usar apenas o indicador visual
       }
     };
 
@@ -360,6 +398,7 @@ export const useWebRTC = () => {
       
       if (state === 'connected') {
         setIsConnecting(false);
+        stopAllSounds(); // Stop connecting sound
         startStatsMonitoring();
 
         // Atualiza sessão para connected via banco (redundância)
@@ -406,14 +445,13 @@ export const useWebRTC = () => {
     };
     
     return connection;
-  }, [user, cleanup, startStatsMonitoring]);
+  }, [user, cleanup, startStatsMonitoring, stopAllSounds]);
 
   // Handler de sinais WebRTC
   const handleSignal = useCallback(async (signal: any, callId: string) => {
     if (signal.sender_id === user?.id || !pc.current) return;
 
     try {
-      // console.log(`📩 Sinal recebido: ${signal.signal_type}`);
       switch (signal.signal_type) {
         case 'answer':
           if (pc.current.signalingState === 'have-local-offer') {
@@ -454,14 +492,18 @@ export const useWebRTC = () => {
           
         case 'hangup':
           cleanup();
+          playEnded();
           toast.info("Chamada encerrada.");
           break;
 
+        case 'busy':
+            cleanup();
+            playBusy();
+            toast.info("Usuário ocupado.");
+            break;
+
         case 'audio-state-change':
           // Update remote participant state if needed
-          // Ideally we update activeCall state so UI can react
-          console.log(`🎤 Remote audio changed: ${signal.signal_data.muted ? 'Muted' : 'Unmuted'}`);
-          // We could store this in activeCall.otherParticipantState or similar if we extended the type
           break;
           
         case 'screen-share-start':
@@ -475,7 +517,7 @@ export const useWebRTC = () => {
     } catch (e) {
       console.error("❌ Erro no processamento do sinal:", e);
     }
-  }, [user, processIceQueue, cleanup]);
+  }, [user, processIceQueue, cleanup, playEnded, playBusy]);
 
   const subscribeToSignals = useCallback((callId: string) => {
       if (callChannelRef.current) supabase.removeChannel(callChannelRef.current);
@@ -498,15 +540,20 @@ export const useWebRTC = () => {
           const newStatus = payload.new.status;
           if (newStatus === 'connected' && activeCall?.session.status !== 'connected') {
                setIsConnecting(false);
+               stopAllSounds();
                setActiveCall(prev => prev ? { ...prev, session: { ...prev.session, status: 'connected' } } : null);
-          } else if (['ended', 'declined', 'busy', 'missed'].includes(newStatus)) {
+          } else if (['ended', 'declined', 'missed'].includes(newStatus)) {
               cleanup();
+              playEnded();
+          } else if (newStatus === 'busy') {
+              cleanup();
+              playBusy();
           }
       })
       .subscribe();
 
       callChannelRef.current = channel;
-  }, [handleSignal, activeCall?.session.status, cleanup]);
+  }, [handleSignal, activeCall?.session.status, cleanup, stopAllSounds, playEnded, playBusy]);
 
   // Função para verificar permissões antes de iniciar
   const checkPermissions = useCallback(async (type: CallType) => {
@@ -533,22 +580,16 @@ export const useWebRTC = () => {
     
     if (!conversationId || !calleeId) {
         toast.error("Erro interno: ID da conversa ou usuário inválido.");
-        console.error("Missing params:", { conversationId, calleeId });
         return;
     }
 
-    if (!navigator.onLine) {
-        toast.error("Sem conexão com a internet.");
-        return;
-    }
-
-    const hasPermission = await checkPermissions(callType);
-    if (!hasPermission) {
-        toast.error("Permissão de câmera/microfone necessária. Verifique suas configurações.");
+    if (!await checkPermissions(callType)) {
+        toast.error("Permissão de câmera/microfone necessária.");
         return;
     }
 
     setIsConnecting(true);
+    playConnecting();
 
     try {
       // 1. Criar entrada na tabela call_sessions
@@ -557,58 +598,43 @@ export const useWebRTC = () => {
         caller_id: user.id,
         callee_id: calleeId,
         call_type: callType,
-        status: 'pending'
+        status: 'pending' // Changed from initiating to pending
       }).select().single();
 
       if (error || !session) throw error;
 
-      // 2. Obter mídia local
-      const stream = await getUserMedia(callType);
+      console.log("📞 Sessão criada:", session.id);
 
-      // PREPARE PARTICIPANT INFO EARLY
-      let otherParticipant: CallParticipant | null = null;
-      if (calleeInfo) {
-          otherParticipant = {
-            id: calleeId,
-            display_name: calleeInfo.displayName,
-            username: calleeInfo.username,
-            avatar_url: calleeInfo.avatarUrl,
-        } as CallParticipant;
-      } else {
-          const { data: profile } = await supabase.from('profiles').select('*').eq('id', calleeId).single();
-          if (profile) otherParticipant = profile as CallParticipant;
-      }
-
-      // SET ACTIVE CALL IMMEDIATELY (For fast UI feedback)
+      // 2. Setar estado local de chamada ativa
       setActiveCall({
         session: session as CallSession,
-        localStream: stream,
+        localStream: null,
         remoteStream: null,
-        isScreenSharing: false,
-        otherParticipant: otherParticipant,
         screenStream: null,
         isAudioEnabled: true,
         isVideoEnabled: callType === 'video',
+        isScreenSharing: false,
+        otherParticipant: calleeInfo ? { id: calleeId, display_name: calleeInfo.displayName, username: calleeInfo.username, avatar_url: calleeInfo.avatarUrl } : null,
         connectionQuality: null,
         stats: null
       });
 
-      // 3. Inicializar PeerConnection
+      // 3. Obter mídia
+      const stream = await getUserMedia(callType);
+      
+      // 4. Criar PeerConnection
       const connection = createPeerConnection(session.id, callType);
       
-      console.log("📤 Adicionando tracks locais ao PC...");
+      // 5. Adicionar tracks locais
       stream.getTracks().forEach(track => {
           connection.addTrack(track, stream);
       });
 
-      // 4. Criar Offer
-      const offer = await connection.createOffer({
-          offerToReceiveAudio: true,
-          offerToReceiveVideo: callType === 'video'
-      });
+      // 6. Criar Offer
+      const offer = await connection.createOffer();
       await connection.setLocalDescription(offer);
 
-      // 5. Enviar Offer via Signals
+      // 7. Enviar Offer (Sinal)
       await supabase.from('call_signals').insert({
         call_id: session.id,
         sender_id: user.id,
@@ -616,21 +642,19 @@ export const useWebRTC = () => {
         signal_data: offer as unknown as Record<string, unknown>
       });
 
-      // 6. Atualizar status para ringing
+      // 8. Atualizar status para ringing (agora que temos Offer)
       await supabase.from('call_sessions').update({ status: 'ringing' }).eq('id', session.id);
 
-      // 7. Atualizar status local para ringing
+      // 9. Atualizar status local para ringing
       setActiveCall(prev => prev ? { 
           ...prev, 
           session: { ...prev.session, status: 'ringing' } 
       } : null);
 
-      // 8. Inscrever nos sinais
+      // 10. Inscrever nos sinais
       subscribeToSignals(session.id);
       
       // Reset flags for new call
-      // Note: isAudioEnabled is initialized to true in setActiveCall above. 
-      // Ensure tracks are enabled if they were disabled previously (though getAudioTracks return new tracks usually enabled)
       stream.getAudioTracks().forEach(t => t.enabled = true);
 
       // Timeout de segurança: Se não conectar em 45s, encerra
@@ -642,6 +666,7 @@ export const useWebRTC = () => {
               if (data && (data.status === 'pending' || data.status === 'ringing')) {
                    toast.error("Não foi possível estabelecer conexão com o usuário.");
                    cleanup();
+                   playBusy(); // Or play timeout sound
                    await supabase.from('call_sessions').update({ status: 'missed' }).eq('id', session.id);
               }
           }
@@ -650,6 +675,7 @@ export const useWebRTC = () => {
     } catch (e) {
       console.error("Erro ao iniciar chamada:", e);
       cleanup();
+      stopAllSounds();
       
       const error = e as any;
       if (error?.code === 'PGRST116') {
@@ -662,13 +688,16 @@ export const useWebRTC = () => {
          toast.error(`Erro ao iniciar chamada: ${error.message || 'Erro desconhecido'}`);
       }
     }
-  }, [user, getUserMedia, createPeerConnection, cleanup, subscribeToSignals, checkPermissions]);
+  }, [user, getUserMedia, createPeerConnection, cleanup, subscribeToSignals, checkPermissions, playConnecting, playBusy, stopAllSounds]);
 
   // Função para atender chamada
   const answerCall = useCallback(async () => {
     if (!incomingCall || !user) return;
     
+    stopAllSounds(); // Stop ringtone
     setIsConnecting(true);
+    playConnecting();
+
     try {
         const callId = incomingCall.session.id;
         const callType = incomingCall.session.call_type as CallType;
@@ -705,7 +734,7 @@ export const useWebRTC = () => {
         const answer = await connection.createAnswer();
         await connection.setLocalDescription(answer);
 
-        // 7. Enviar Answer
+        // 6. Enviar Answer
         await supabase.from('call_signals').insert({
             call_id: callId,
             sender_id: user.id,
@@ -717,53 +746,58 @@ export const useWebRTC = () => {
         const now = new Date().toISOString();
         await supabase.from('call_sessions').update({ status: 'connected', started_at: now }).eq('id', callId);
 
+        // 8. Setar estado local
         setActiveCall({
             session: { ...incomingCall.session, status: 'connected', started_at: now },
             localStream: stream,
-            remoteStream: remoteStreamRef.current, // Usa o ref caso o ontrack já tenha disparado
-            isScreenSharing: false,
-            otherParticipant: incomingCall.caller,
+            remoteStream: null,
             screenStream: null,
             isAudioEnabled: true,
             isVideoEnabled: callType === 'video',
+            isScreenSharing: false,
+            otherParticipant: incomingCall.caller,
             connectionQuality: null,
             stats: null
         });
-        
+
         setIncomingCall(null);
         subscribeToSignals(callId);
 
     } catch (e) {
-        console.error("Erro ao atender:", e);
+        console.error("Erro ao atender chamada:", e);
+        toast.error("Erro ao conectar chamada.");
         cleanup();
-        const err = e as Error;
-        toast.error(`Erro ao atender chamada: ${err.message || 'Desconhecido'}`);
+        stopAllSounds();
     }
-  }, [incomingCall, user, getUserMedia, createPeerConnection, cleanup, subscribeToSignals, processIceQueue]);
+  }, [incomingCall, user, getUserMedia, createPeerConnection, subscribeToSignals, processIceQueue, cleanup, playConnecting, stopAllSounds]);
 
   const declineCall = useCallback(async () => {
       if (!incomingCall || !user) return;
       
-      const conversationId = incomingCall.session.conversation_id;
+      stopAllSounds(); // Stop ringtone
       
-      await supabase.from('call_sessions').update({ status: 'declined' }).eq('id', incomingCall.session.id);
+      try {
+          await supabase.from('call_sessions').update({ 
+              status: 'declined',
+              ended_at: new Date().toISOString()
+          }).eq('id', incomingCall.session.id);
+          
+          await supabase.from('call_signals').insert({
+              call_id: incomingCall.session.id,
+              sender_id: user.id,
+              signal_type: 'hangup', // ou declined
+              signal_data: {}
+          });
+      } catch (e) {
+          console.error("Erro ao recusar chamada:", e);
+      }
       
-      await supabase.from('messages').insert({
-        conversation_id: conversationId,
-        sender_id: user.id,
-        content: "📞 Chamada recusada"
-      });
-
       setIncomingCall(null);
-  }, [incomingCall, user]);
+  }, [incomingCall, user, stopAllSounds]);
 
   const endCall = useCallback(async () => {
       if (activeCall && user) {
           let status = 'ended';
-          // Se estava apenas iniciando ou tocando, e eu encerro, é missed (para o outro) ou canceled?
-          // Se eu sou o caller e encerro em ringing -> canceled (não implementado, usamos missed/ended)
-          // Se eu sou o callee e encerro em ringing -> declined (tratado em declineCall)
-          // Aqui tratamos quando o usuário clica em "Sair" ou "Encerrar".
           
           const isConnected = activeCall.session.status === 'connected';
           const hasDuration = activeCall.session.started_at && (Date.now() - new Date(activeCall.session.started_at).getTime() > 0);
@@ -781,10 +815,6 @@ export const useWebRTC = () => {
                 content: "📞 Chamada perdida"
              });
           } else if (status === 'ended') {
-              // Opcional: Inserir mensagem de chamada encerrada com duração?
-              // O usuário pediu para corrigir "Chamada perdida" aparecendo erroneamente.
-              // Se foi ended, não deve aparecer "Chamada perdida".
-              // Vou adicionar mensagem de encerramento para clareza.
               const durationMsg = hasDuration ? ` (${Math.floor((Date.now() - new Date(activeCall.session.started_at!).getTime())/1000)}s)` : '';
               await supabase.from('messages').insert({
                 conversation_id: activeCall.session.conversation_id,
@@ -799,46 +829,59 @@ export const useWebRTC = () => {
               signal_type: 'hangup',
               signal_data: {}
           });
+          
+          playEnded();
       }
       cleanup();
-  }, [activeCall, user, cleanup]);
+  }, [activeCall, user, cleanup, playEnded]);
 
+  // Função para silenciar áudio
   const toggleAudio = useCallback(async () => {
-    if (localStreamRef.current && activeCall) {
-      // Toggle actual audio tracks
-      localStreamRef.current.getAudioTracks().forEach(track => {
-        track.enabled = !track.enabled;
+    if (!localStreamRef.current || !activeCall) return;
+    
+    const audioTracks = localStreamRef.current.getAudioTracks();
+    const newEnabled = !activeCall.isAudioEnabled;
+    
+    audioTracks.forEach(track => {
+      track.enabled = newEnabled;
+    });
+    
+    setActiveCall(prev => prev ? { ...prev, isAudioEnabled: newEnabled } : null);
+    
+    // Enviar sinal de mudança de estado (agora seguro com a nova migration)
+    if (user) {
+      await supabase.from('call_signals').insert({
+        call_id: activeCall.session.id,
+        sender_id: user.id,
+        signal_type: 'audio-state-change',
+        signal_data: { muted: !newEnabled }
       });
-      
-      const newAudioState = !activeCall.isAudioEnabled;
-      
-      setActiveCall(prev => prev ? { ...prev, isAudioEnabled: newAudioState } : null);
-
-      // Send signal to other peer about mute state
-      /* 
-      // TODO: Enable this when signal_type check constraint supports 'audio-state-change'
-      try {
-        await supabase.from('call_signals').insert({
-            call_id: activeCall.session.id,
-            sender_id: user?.id,
-            signal_type: 'audio-state-change' as any, // Cast to any to avoid type error if type is missing
-            signal_data: { muted: !newAudioState }
-        });
-      } catch (e) {
-        console.error("Error sending audio state change:", e);
-      }
-      */
     }
   }, [activeCall, user]);
 
-  const toggleVideo = useCallback(() => {
-    if (localStreamRef.current) {
-      localStreamRef.current.getVideoTracks().forEach(track => {
-        track.enabled = !track.enabled;
+  // Função para silenciar vídeo
+  const toggleVideo = useCallback(async () => {
+    if (!localStreamRef.current || !activeCall) return;
+    
+    const videoTracks = localStreamRef.current.getVideoTracks();
+    const newEnabled = !activeCall.isVideoEnabled;
+    
+    videoTracks.forEach(track => {
+      track.enabled = newEnabled;
+    });
+    
+    setActiveCall(prev => prev ? { ...prev, isVideoEnabled: newEnabled } : null);
+
+    // Enviar sinal de mudança de estado
+    if (user) {
+      await supabase.from('call_signals').insert({
+        call_id: activeCall.session.id,
+        sender_id: user.id,
+        signal_type: 'video-state-change',
+        signal_data: { disabled: !newEnabled }
       });
-      setActiveCall(prev => prev ? { ...prev, isVideoEnabled: !prev.isVideoEnabled } : null);
     }
-  }, []);
+  }, [activeCall, user]);
 
   const switchCamera = useCallback(async () => {
     if (localStreamRef.current) {
@@ -850,97 +893,127 @@ export const useWebRTC = () => {
         
         try {
             const newStream = await navigator.mediaDevices.getUserMedia({
-              video: { facingMode: newFacingMode }
+                video: { facingMode: newFacingMode }
             });
-            const newVideoTrack = newStream.getVideoTracks()[0];
+            const newTrack = newStream.getVideoTracks()[0];
             
             if (pc.current) {
-              const sender = pc.current.getSenders().find(s => s.track?.kind === 'video');
-              if (sender) sender.replaceTrack(newVideoTrack);
+                const sender = pc.current.getSenders().find(s => s.track?.kind === 'video');
+                if (sender) {
+                    await sender.replaceTrack(newTrack);
+                }
             }
             
+            // Re-add to local stream
             localStreamRef.current.removeTrack(videoTrack);
-            localStreamRef.current.addTrack(newVideoTrack);
-            
-            setActiveCall(prev => prev ? { ...prev, localStream: localStreamRef.current } : null);
+            localStreamRef.current.addTrack(newTrack);
         } catch (e) {
             console.error("Erro ao trocar câmera:", e);
-            toast.error("Erro ao acessar a outra câmera");
+            toast.error("Não foi possível trocar a câmera");
         }
       }
     }
   }, []);
 
   const toggleScreenShare = useCallback(async () => {
-    if (!pc.current || !activeCall || !user) return;
+    if (!activeCall || !pc.current || !user) return;
 
-    if (!activeCall.isScreenSharing) {
-      try {
-        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-        screenStreamRef.current = screenStream;
-        const screenTrack = screenStream.getVideoTracks()[0];
-        
-        const sender = pc.current.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) {
-          sender.replaceTrack(screenTrack);
+    try {
+        if (activeCall.isScreenSharing) {
+            // Stop Screen Share
+            if (screenStreamRef.current) {
+                screenStreamRef.current.getTracks().forEach(track => track.stop());
+                screenStreamRef.current = null;
+            }
+
+            // Revert to camera video if available
+            if (activeCall.session.call_type === 'video' && localStreamRef.current) {
+                const videoTrack = localStreamRef.current.getVideoTracks()[0];
+                if (videoTrack) {
+                    const sender = pc.current.getSenders().find(s => s.track?.kind === 'video');
+                    if (sender) await sender.replaceTrack(videoTrack);
+                }
+            }
+
+            setActiveCall(prev => prev ? { ...prev, isScreenSharing: false } : null);
+            
+            await supabase.from('call_signals').insert({
+                call_id: activeCall.session.id,
+                sender_id: user.id,
+                signal_type: 'screen-share-stop',
+                signal_data: {}
+            });
+
+        } else {
+            // Start Screen Share
+            // @ts-ignore - getDisplayMedia exists
+            const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+            screenStreamRef.current = stream;
+            
+            const screenTrack = stream.getVideoTracks()[0];
+            
+            // Handle user stopping via browser UI
+            screenTrack.onended = () => {
+                // If we are still sharing in state, toggle off
+                if (screenStreamRef.current) toggleScreenShare();
+            };
+
+            // Replace video track
+            const sender = pc.current.getSenders().find(s => s.track?.kind === 'video');
+            if (sender) {
+                await sender.replaceTrack(screenTrack);
+            } else {
+                if (activeCall.session.call_type !== 'video') {
+                    toast.error("Compartilhamento de tela disponível apenas em chamadas de vídeo.");
+                    stream.getTracks().forEach(t => t.stop());
+                    return;
+                }
+            }
+
+            setActiveCall(prev => prev ? { ...prev, isScreenSharing: true } : null);
+            
+            await supabase.from('call_signals').insert({
+                call_id: activeCall.session.id,
+                sender_id: user.id,
+                signal_type: 'screen-share-start',
+                signal_data: {}
+            });
         }
-        
-        screenTrack.onended = () => toggleScreenShare();
-
-        setActiveCall(prev => prev ? { ...prev, isScreenSharing: true } : null);
-        
-        await supabase.from('call_signals').insert({
-            call_id: activeCall.session.id,
-            sender_id: user.id,
-            signal_type: 'screen-share-start',
-            signal_data: {}
-        });
-
-      } catch (e) {
+    } catch (e) {
         console.error("Erro ao compartilhar tela:", e);
-      }
-    } else {
-      if (localStreamRef.current) {
-        const cameraTrack = localStreamRef.current.getVideoTracks()[0];
-        const sender = pc.current.getSenders().find(s => s.track?.kind === 'video');
-        if (sender && cameraTrack) {
-          sender.replaceTrack(cameraTrack);
-        }
-      }
-      
-      if (screenStreamRef.current) {
-        screenStreamRef.current.getTracks().forEach(t => t.stop());
-        screenStreamRef.current = null;
-      }
-      
-      setActiveCall(prev => prev ? { ...prev, isScreenSharing: false } : null);
-
-      await supabase.from('call_signals').insert({
-            call_id: activeCall.session.id,
-            sender_id: user.id,
-            signal_type: 'screen-share-stop',
-            signal_data: {}
-      });
+        toast.error("Erro ao compartilhar tela.");
     }
   }, [activeCall, user]);
 
+  const sendCallMessage = useCallback(async (content: string) => {
+      if (!activeCall || !user) return;
+      
+      const { error } = await supabase.from('call_messages').insert({
+          call_id: activeCall.session.id,
+          sender_id: user.id,
+          content
+      });
+      
+      if (error) {
+          toast.error("Erro ao enviar mensagem.");
+          console.error(error);
+      }
+  }, [activeCall, user]);
+
   return {
-    activeCall,
-    incomingCall,
-    callMessages,
-    isConnecting,
-    connectionQuality,
     startCall,
+    endCall,
     answerCall,
     declineCall,
-    endCall,
     toggleAudio,
     toggleVideo,
     toggleScreenShare,
     switchCamera,
-    sendCallMessage: async (content: string) => {
-        // Implement chat logic inside call if needed
-    },
-    setIncomingCall // Exported to be used by global listener if needed
+    sendCallMessage,
+    activeCall,
+    incomingCall,
+    isConnecting,
+    connectionQuality,
+    callMessages
   };
 };

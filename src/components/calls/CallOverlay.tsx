@@ -185,7 +185,7 @@ export const CallOverlay = () => {
 
   const isVideoCall = activeCall.session.call_type === 'video';
   const isConnected = activeCall.session.status === 'connected';
-  const isRinging = activeCall.session.status === 'ringing' || activeCall.session.status === 'initiating';
+  const isRinging = activeCall.session.status === 'ringing' || activeCall.session.status === 'initiating' || activeCall.session.status === 'pending';
   
   const hasRemoteVideo = isVideoCall && !!activeCall.remoteStream && activeCall.remoteStream.getVideoTracks().length > 0;
   const hasLocalVideo = isVideoCall && !!activeCall.localStream && activeCall.localStream.getVideoTracks().length > 0;
