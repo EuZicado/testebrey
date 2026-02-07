@@ -261,6 +261,7 @@ const Profile = () => {
         verificationBadge={getVerificationType()}
         isOwnProfile={true}
         walletBalance={profile.wallet_balance || 0}
+        activeTab={activeTab}
         onTabChange={handleTabChange}
       />
 

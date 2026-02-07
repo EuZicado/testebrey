@@ -557,7 +557,7 @@ export const useWebRTC = () => {
         caller_id: user.id,
         callee_id: calleeId,
         call_type: callType,
-        status: 'initiating'
+        status: 'pending'
       }).select().single();
 
       if (error || !session) throw error;
@@ -637,9 +637,9 @@ export const useWebRTC = () => {
       setTimeout(async () => {
           if (pc.current && pc.current.connectionState !== 'connected' && pc.current.connectionState !== 'connecting') {
               console.warn("⚠️ Call timeout - no connection established.");
-              // Apenas limpa se ainda estiver tentando conectar (status initiating ou ringing)
+              // Apenas limpa se ainda estiver tentando conectar (status pending ou ringing)
               const { data } = await supabase.from('call_sessions').select('status').eq('id', session.id).single();
-              if (data && (data.status === 'initiating' || data.status === 'ringing')) {
+              if (data && (data.status === 'pending' || data.status === 'ringing')) {
                    toast.error("Não foi possível estabelecer conexão com o usuário.");
                    cleanup();
                    await supabase.from('call_sessions').update({ status: 'missed' }).eq('id', session.id);
@@ -768,7 +768,7 @@ export const useWebRTC = () => {
           const isConnected = activeCall.session.status === 'connected';
           const hasDuration = activeCall.session.started_at && (Date.now() - new Date(activeCall.session.started_at).getTime() > 0);
 
-          if (!isConnected && !hasDuration && (activeCall.session.status === 'initiating' || activeCall.session.status === 'ringing')) {
+          if (!isConnected && !hasDuration && (activeCall.session.status === 'pending' || activeCall.session.status === 'ringing')) {
              status = 'missed';
           }
 
@@ -815,16 +815,19 @@ export const useWebRTC = () => {
       setActiveCall(prev => prev ? { ...prev, isAudioEnabled: newAudioState } : null);
 
       // Send signal to other peer about mute state
+      /* 
+      // TODO: Enable this when signal_type check constraint supports 'audio-state-change'
       try {
         await supabase.from('call_signals').insert({
             call_id: activeCall.session.id,
             sender_id: user?.id,
-            signal_type: 'audio-state-change',
+            signal_type: 'audio-state-change' as any, // Cast to any to avoid type error if type is missing
             signal_data: { muted: !newAudioState }
         });
       } catch (e) {
         console.error("Error sending audio state change:", e);
       }
+      */
     }
   }, [activeCall, user]);
 
