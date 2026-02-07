@@ -637,11 +637,11 @@ export const useWebRTC = () => {
 
         // 2. Criar PC
         const connection = createPeerConnection(callId, callType);
-        // stream.getTracks().forEach(track => connection.addTrack(track, stream)); // REMOVIDO DAQUI, movido para após setRemoteDescription? NÃO.
-        // O padrão correto é AddTracks -> SetRemoteDesc -> CreateAnswer.
-        // Mas espere, se eu fizer AddTracks ANTES do SetRemoteDesc, o navegador cria transceivers novos.
-        // Se eu fizer DEPOIS do SetRemoteDesc, o navegador usa os transceivers criados pelo Offer.
-        // VAMOS MANTER DEPOIS do SetRemoteDesc para reutilizar transceivers do Offer (mais seguro para WebRTC moderno).
+        
+        console.log("📤 Adicionando tracks locais ao PC de resposta...");
+        stream.getTracks().forEach(track => {
+            connection.addTrack(track, stream);
+        });
         
         // 3. Buscar Offer
         const { data: signals } = await supabase
@@ -660,17 +660,7 @@ export const useWebRTC = () => {
         isDescriptionSet.current = true;
         await processIceQueue();
 
-        // 5. Adicionar Tracks (Depois do RemoteDescription para garantir transceivers corretos ou antes?)
-        // Spec recomenda adicionar tracks antes de createAnswer. Se transceivers foram criados pelo setRemoteDescription (Offer),
-        // addTrack deve reutilizá-los se possível.
-        // Vamos garantir que todos os tracks locais sejam enviados.
-        
-        console.log("📤 Adicionando tracks locais ao PC de resposta...");
-        stream.getTracks().forEach(track => {
-            connection.addTrack(track, stream);
-        });
-
-        // 6. Criar Answer
+        // 5. Criar Answer
         const answer = await connection.createAnswer();
         await connection.setLocalDescription(answer);
 

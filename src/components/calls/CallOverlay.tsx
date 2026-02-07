@@ -342,8 +342,8 @@ export const CallOverlay = () => {
              </motion.div>
           )}
           
-          {/* Hidden Remote Audio Element */}
-          {activeCall.remoteStream && (
+          {/* Hidden Remote Audio Element - Render only if VideoElement is NOT handling audio */}
+          {activeCall.remoteStream && !hasRemoteVideo && (
              <audio 
                 ref={remoteAudioRef} 
                 autoPlay 
