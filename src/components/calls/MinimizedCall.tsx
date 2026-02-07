@@ -49,24 +49,35 @@ export const MinimizedCall = ({
         {/* Main PiP window */}
         <motion.div 
           className={cn(
-            "w-36 h-48 rounded-2xl overflow-hidden bg-card border-2 shadow-2xl transition-colors duration-300",
-            quality === 'poor' || quality === 'fair' ? "border-yellow-500/50" :
-            quality === 'bad' || quality === 'disconnected' ? "border-destructive/50" :
-            "border-white/20"
+            "w-48 h-64 rounded-2xl overflow-hidden bg-zinc-900/90 border shadow-2xl transition-all duration-300 backdrop-blur-xl",
+            quality === 'poor' || quality === 'fair' ? "border-yellow-500/50 shadow-yellow-500/10" :
+            quality === 'bad' || quality === 'disconnected' ? "border-red-500/50 shadow-red-500/10" :
+            "border-white/10 shadow-black/50"
           )}
           onClick={onExpand}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
         >
           {isVideoCall && activeCall.remoteStream ? (
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              className="w-full h-full object-cover"
-            />
+            <div className="relative w-full h-full">
+                <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+            </div>
           ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-card to-muted/30">
+            <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900 relative overflow-hidden">
+                {/* Dynamic Background */}
+                <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-950" />
+                <motion.div 
+                    className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl"
+                    animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
+                    transition={{ duration: 4, repeat: Infinity }}
+                />
+
               <motion.div
                 animate={{ 
                   scale: [1, 1.05, 1],
@@ -76,49 +87,62 @@ export const MinimizedCall = ({
                   duration: 2,
                   ease: "easeInOut"
                 }}
+                className="relative z-10"
               >
-                <Avatar className="w-16 h-16 border-2 border-primary/30">
-                  <AvatarImage src={activeCall.otherParticipant?.avatar_url || undefined} />
-                  <AvatarFallback className="text-xl bg-primary/20">
-                    {(activeCall.otherParticipant?.display_name || "U")[0].toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="p-1 rounded-full bg-white/5 backdrop-blur-sm border border-white/10">
+                    <Avatar className="w-20 h-20 border-2 border-zinc-800 shadow-xl">
+                    <AvatarImage src={activeCall.otherParticipant?.avatar_url || undefined} className="object-cover" />
+                    <AvatarFallback className="text-2xl bg-zinc-800 text-zinc-400 font-bold">
+                        {(activeCall.otherParticipant?.display_name || "U")[0].toUpperCase()}
+                    </AvatarFallback>
+                    </Avatar>
+                </div>
               </motion.div>
-              <p className="text-xs font-medium mt-2 text-foreground/80 truncate max-w-[90%]">
+              <p className="text-sm font-semibold mt-3 text-white truncate max-w-[85%] relative z-10">
                 {activeCall.otherParticipant?.display_name}
               </p>
             </div>
           )}
 
           {/* Duration badge */}
-          <div className="absolute bottom-2 left-2 bg-background/80 backdrop-blur-sm px-2 py-0.5 rounded-full flex items-center gap-1.5">
-            <span className="text-xs font-medium tabular-nums">{formatDuration(callDuration)}</span>
-            {/* Small Quality Indicator */}
-             {quality !== 'excellent' && quality !== 'good' && (
-                quality === 'disconnected' ? <WifiOff className="w-3 h-3 text-destructive" /> :
-                <Wifi className={cn("w-3 h-3", quality === 'bad' ? "text-destructive" : "text-yellow-500")} />
-             )}
+          <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full flex items-center gap-2 border border-white/5 shadow-lg">
+            <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", 
+                quality === 'bad' || quality === 'disconnected' ? "bg-red-500" : "bg-emerald-500"
+            )} />
+            <span className="text-xs font-medium text-white tabular-nums tracking-wide">{formatDuration(callDuration)}</span>
           </div>
 
+          {/* Connection Quality Indicator (if not good) */}
+          {(quality !== 'excellent' && quality !== 'good') && (
+            <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-md p-1.5 rounded-full border border-white/5">
+                {quality === 'disconnected' ? <WifiOff className="w-3 h-3 text-red-500" /> :
+                 <Wifi className={cn("w-3 h-3", quality === 'bad' ? "text-red-500" : "text-yellow-500")} />
+                }
+            </div>
+          )}
+
           {/* Expand hint */}
-          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-            <Maximize2 className="w-6 h-6 text-white" />
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center backdrop-blur-[1px]">
+            <div className="bg-white/10 p-3 rounded-full backdrop-blur-md border border-white/20 transform scale-75 group-hover:scale-100 transition-transform">
+                <Maximize2 className="w-6 h-6 text-white" />
+            </div>
           </div>
 
           {/* Audio indicator */}
           {!isVideoCall && activeCall.session.status === 'connected' && (
-            <div className="absolute top-2 left-2 flex items-center gap-0.5">
+            <div className="absolute top-4 right-4 flex items-center gap-0.5">
               {[...Array(3)].map((_, i) => (
                 <motion.div
                   key={i}
-                  className="w-0.5 bg-primary rounded-full"
+                  className="w-1 bg-emerald-500/80 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"
                   animate={{
-                    height: [6, 14, 6],
+                    height: [8, 16, 8],
                   }}
                   transition={{
-                    duration: 0.6,
+                    duration: 0.8,
                     repeat: Infinity,
                     delay: i * 0.15,
+                    ease: "easeInOut"
                   }}
                 />
               ))}
@@ -128,31 +152,31 @@ export const MinimizedCall = ({
  
          {/* End call button */}
          <motion.button
-           whileHover={{ scale: 1.1 }}
+           whileHover={{ scale: 1.1, rotate: 90 }}
            whileTap={{ scale: 0.9 }}
            onClick={(e) => {
              e.stopPropagation();
              onEndCall();
            }}
-           className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-destructive flex items-center justify-center shadow-lg glow-destructive"
+           className="absolute -top-3 -right-3 w-9 h-9 rounded-full bg-red-500 flex items-center justify-center shadow-lg shadow-red-500/20 border-2 border-zinc-900 transition-colors hover:bg-red-600 z-50"
          >
-           <PhoneOff className="w-4 h-4 text-destructive-foreground" />
+           <PhoneOff className="w-4 h-4 text-white" />
          </motion.button>
  
          {/* Muted indicators */}
-         <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+         <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex gap-2">
            {!activeCall.isAudioEnabled && (
-             <div className="w-5 h-5 rounded-full bg-destructive/90 flex items-center justify-center text-[10px]">
+             <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center shadow-lg text-xs" title="Microfone desligado">
                🔇
              </div>
            )}
            {isVideoCall && !activeCall.isVideoEnabled && (
-             <div className="w-5 h-5 rounded-full bg-destructive/90 flex items-center justify-center text-[10px]">
-               📵
+             <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center shadow-lg text-xs" title="Câmera desligada">
+               📷
              </div>
            )}
          </div>
        </div>
      </motion.div>
-   );
+  );
  };

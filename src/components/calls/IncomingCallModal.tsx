@@ -17,51 +17,58 @@ export const IncomingCallModal = () => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-6 overflow-hidden bg-black/80 backdrop-blur-sm"
+        className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-6 overflow-hidden bg-zinc-950/80 backdrop-blur-xl"
       >
         {/* Background blur pattern */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <motion.div
-            className="absolute -top-1/4 -left-1/4 w-1/2 h-1/2 rounded-full bg-green-500/10 blur-3xl"
+            className="absolute -top-1/4 -left-1/4 w-1/2 h-1/2 rounded-full bg-emerald-500/20 blur-[120px]"
             animate={{ 
               x: [0, 50, 0],
               y: [0, 30, 0],
+              scale: [1, 1.1, 1]
             }}
-            transition={{ duration: 8, repeat: Infinity }}
+            transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
           />
           <motion.div
-            className="absolute -bottom-1/4 -right-1/4 w-1/2 h-1/2 rounded-full bg-blue-500/10 blur-3xl"
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full max-w-lg max-h-lg bg-zinc-900/50 blur-[100px] rounded-full"
+            animate={{ opacity: [0.5, 0.8, 0.5] }}
+            transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+          />
+          <motion.div
+            className="absolute -bottom-1/4 -right-1/4 w-1/2 h-1/2 rounded-full bg-blue-500/20 blur-[120px]"
             animate={{ 
               x: [0, -30, 0],
               y: [0, -50, 0],
+              scale: [1, 1.2, 1]
             }}
-            transition={{ duration: 10, repeat: Infinity }}
+            transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 2 }}
           />
         </div>
 
         {/* Caller Info */}
         <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 0.1 }}
+          initial={{ scale: 0.9, opacity: 0, y: 20 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
           className="relative flex flex-col items-center z-10"
         >
           {/* Animated ring around avatar */}
-          <div className="relative">
+          <div className="relative mb-8">
             {/* Multiple pulsing rings */}
             {[1, 2, 3].map((i) => (
               <motion.div
                 key={i}
-                className="absolute inset-0 rounded-full border-2 border-green-500/40"
+                className="absolute inset-0 rounded-full border border-emerald-500/30"
                 initial={{ scale: 1, opacity: 0.5 }}
                 animate={{
-                  scale: [1, 1.3 + i * 0.15],
+                  scale: [1, 1.5 + i * 0.2],
                   opacity: [0.5, 0],
                 }}
                 transition={{
-                  duration: 1.5,
+                  duration: 2,
                   repeat: Infinity,
-                  delay: i * 0.3,
+                  delay: i * 0.4,
                   ease: "easeOut"
                 }}
               />
@@ -69,91 +76,106 @@ export const IncomingCallModal = () => {
             
             {/* Glow effect */}
             <motion.div
-              className="absolute inset-0 bg-green-500/30 blur-2xl rounded-full"
+              className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full"
               animate={{
-                scale: [1, 1.2, 1],
+                scale: [0.8, 1.2, 0.8],
+                opacity: [0.5, 0.8, 0.5]
               }}
               transition={{
-                duration: 1.5,
+                duration: 3,
                 repeat: Infinity,
+                ease: "easeInOut"
               }}
             />
             
-            <Avatar className="relative w-36 h-36 border-4 border-green-500/40 shadow-2xl">
-              <AvatarImage src={incomingCall.caller.avatar_url || undefined} />
-              <AvatarFallback className="text-5xl bg-zinc-800 text-white">
-                {(incomingCall.caller.display_name || "U")[0].toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+            <div className="relative p-1 rounded-full bg-gradient-to-b from-emerald-500/50 to-transparent backdrop-blur-sm">
+                <Avatar className="w-32 h-32 border-4 border-zinc-950 shadow-2xl">
+                <AvatarImage src={incomingCall.caller.avatar_url || undefined} className="object-cover" />
+                <AvatarFallback className="text-4xl bg-zinc-900 text-white font-bold">
+                    {(incomingCall.caller.display_name || "U")[0].toUpperCase()}
+                </AvatarFallback>
+                </Avatar>
+            </div>
+            
+            {/* Status Indicator */}
+            <motion.div 
+                className="absolute bottom-1 right-1 w-6 h-6 bg-emerald-500 rounded-full border-4 border-zinc-950 shadow-lg"
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+            />
           </div>
 
-          <h2 className="mt-8 text-3xl font-bold text-white">
+          <h2 className="text-3xl font-bold text-white text-center tracking-tight">
             {incomingCall.caller.display_name || incomingCall.caller.username}
           </h2>
-          <p className="text-zinc-400 mt-2 flex items-center gap-2 text-lg">
+          <div className="mt-3 flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 backdrop-blur-md border border-white/10 shadow-xl">
             {isVideoCall ? (
-              <>
-                <Video className="w-5 h-5" />
-                Videochamada recebida
-              </>
+                <Video className="w-4 h-4 text-emerald-400" />
             ) : (
-              <>
-                <Phone className="w-5 h-5" />
-                Chamada de voz recebida
-              </>
+                <Phone className="w-4 h-4 text-emerald-400" />
             )}
-          </p>
+            <span className="text-sm font-medium text-white/90">
+                {isVideoCall ? 'Videochamada recebida' : 'Chamada de voz recebida'}
+            </span>
+          </div>
         </motion.div>
 
         {/* Call Actions */}
         <motion.div
           initial={{ y: 50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="relative z-10 mt-20 flex items-center gap-16"
+          transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+          className="relative z-10 mt-16 flex items-center gap-12"
         >
           {/* Decline */}
-          <motion.div 
-            className="flex flex-col items-center gap-3"
-            whileHover={{ scale: 1.05 }}
-          >
+          <div className="flex flex-col items-center gap-3">
             <motion.button
+              whileHover={{ scale: 1.1, rotate: -5 }}
               whileTap={{ scale: 0.9 }}
               onClick={declineCall}
-              className="w-20 h-20 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-lg transition-colors"
+              className="w-16 h-16 rounded-full bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white border border-red-500/50 flex items-center justify-center shadow-lg transition-all duration-300 backdrop-blur-sm"
             >
-              <PhoneOff className="w-8 h-8 text-white" />
+              <PhoneOff className="w-7 h-7" />
             </motion.button>
-            <span className="text-sm font-medium text-white/80">Recusar</span>
-          </motion.div>
+            <span className="text-xs font-medium text-white/60 tracking-wide uppercase">Recusar</span>
+          </div>
 
           {/* Answer */}
-          <motion.div 
-            className="flex flex-col items-center gap-3"
-            whileHover={{ scale: 1.05 }}
-          >
+          <div className="flex flex-col items-center gap-3">
             <motion.button
+              whileHover={{ scale: 1.1, rotate: 5 }}
               whileTap={{ scale: 0.9 }}
               onClick={answerCall}
               disabled={isConnecting}
               className={cn(
-                "w-20 h-20 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center shadow-lg transition-colors",
+                "w-20 h-20 rounded-full bg-emerald-500 hover:bg-emerald-400 flex items-center justify-center shadow-[0_0_40px_-10px_rgba(16,185,129,0.5)] transition-all duration-300 border-4 border-emerald-400/30",
                 isConnecting && "opacity-50 cursor-not-allowed"
               )}
               animate={!isConnecting ? {
-                scale: [1, 1.05, 1],
+                boxShadow: [
+                    "0 0 0 0 rgba(16, 185, 129, 0.4)",
+                    "0 0 0 20px rgba(16, 185, 129, 0)",
+                ]
               } : {}}
               transition={{
-                duration: 1,
+                duration: 1.5,
                 repeat: Infinity,
               }}
             >
-              {isVideoCall ? <Video className="w-8 h-8 text-white" /> : <Phone className="w-8 h-8 text-white" />}
+              {isConnecting ? (
+                  <motion.div 
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    className="w-8 h-8 border-2 border-white border-t-transparent rounded-full"
+                  />
+              ) : (
+                  isVideoCall ? <Video className="w-8 h-8 text-white fill-current" /> : <Phone className="w-8 h-8 text-white fill-current" />
+              )}
             </motion.button>
-            <span className="text-sm font-medium text-white/80">
+            <span className="text-xs font-medium text-white/60 tracking-wide uppercase">
               {isConnecting ? "Conectando..." : "Atender"}
             </span>
-          </motion.div>
+          </div>
         </motion.div>
 
       </motion.div>

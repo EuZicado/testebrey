@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, useCallback } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { 
   Mic, 
   MicOff, 
@@ -43,7 +43,6 @@ const VideoElement = ({
 
     if (stream) {
       if (video.srcObject !== stream) {
-        // console.log(`🎥 [VideoElement] Attaching ${isLocal ? 'local' : 'remote'} stream (ID: ${stream.id})`);
         video.srcObject = stream;
         if (isLocal) {
           video.muted = true;
@@ -185,14 +184,9 @@ export const CallOverlay = () => {
   const isConnected = activeCall.session.status === 'connected';
   const isRinging = activeCall.session.status === 'ringing' || activeCall.session.status === 'initiating';
   
-  // Determine what to show as the main background
-  // 1. If we have remote video -> Show Remote
-  // 2. If no remote video, but we have local video (waiting/ringing) -> Show Local (mirrored)
-  // 3. Otherwise -> Show dark background
   const hasRemoteVideo = isVideoCall && !!activeCall.remoteStream && activeCall.remoteStream.getVideoTracks().length > 0;
   const hasLocalVideo = isVideoCall && !!activeCall.localStream && activeCall.localStream.getVideoTracks().length > 0;
   
-  // If we are showing local video as background (during ring), we don't need the avatar overlay to be opaque
   const showVideoBackground = hasRemoteVideo || hasLocalVideo;
 
   if (isMinimized) {
@@ -207,9 +201,9 @@ export const CallOverlay = () => {
   }
 
   return (
-    <div className="fixed inset-0 z-[100] bg-zinc-950 flex flex-col font-sans">
+    <div className="fixed inset-0 z-[100] bg-zinc-950 flex flex-col font-sans overflow-hidden">
         {/* Main Content Area */}
-        <div className="relative flex-1 w-full overflow-hidden flex flex-col">
+        <div className="relative flex-1 w-full h-full flex flex-col">
           
           {/* LAYER 0: Video Background */}
           <div className="absolute inset-0 z-0">
@@ -226,23 +220,40 @@ export const CallOverlay = () => {
                  className="w-full h-full object-cover transform -scale-x-100"
                />
              ) : (
-                // Fallback for Audio Calls or Missing Video
-                <div className="w-full h-full bg-zinc-900" />
+                // Modern Dynamic Background for Audio Calls
+                <div className="w-full h-full bg-zinc-900 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950" />
+                    
+                    {/* Animated Blobs */}
+                    <motion.div 
+                        className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-[100px]"
+                        animate={{ 
+                            scale: [1, 1.2, 1],
+                            opacity: [0.3, 0.5, 0.3],
+                            x: [0, 50, 0]
+                        }}
+                        transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+                    />
+                    <motion.div 
+                        className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-[100px]"
+                        animate={{ 
+                            scale: [1.2, 1, 1.2],
+                            opacity: [0.3, 0.5, 0.3],
+                            y: [0, -50, 0]
+                        }}
+                        transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+                    />
+                </div>
              )}
           </div>
 
-          {/* LAYER 1: Gradient Overlay (visibility depends on context) */}
+          {/* LAYER 1: Gradient Overlay */}
           <div className={cn(
-             "absolute inset-0 pointer-events-none transition-colors duration-500",
-             showVideoBackground ? "bg-black/20" : "bg-zinc-900" // Use lighter overlay if video is showing
+             "absolute inset-0 pointer-events-none transition-colors duration-500 z-1",
+             showVideoBackground ? "bg-gradient-to-b from-black/60 via-transparent to-black/80" : "bg-black/20"
           )} />
 
           {/* LAYER 2: Avatar & Status Info */}
-          {/* Only show full avatar overlay if:
-              1. It's an Audio Call
-              2. OR We are waiting for connection AND we don't have local video to show (e.g. permission issue)
-              3. OR We are connected but remote has no video (handled by hasRemoteVideo check above)
-           */}
           {(!showVideoBackground || !isConnected) && (
              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-4">
                 
@@ -282,30 +293,30 @@ export const CallOverlay = () => {
                 )}
 
                 <Avatar className={cn(
-                    "border-4 border-zinc-800 shadow-2xl z-20 transition-all duration-500",
-                    showVideoBackground ? "w-24 h-24 mb-4" : "w-32 h-32 mb-6" // Shrink avatar if video is background (e.g. local preview)
+                    "border-4 border-zinc-800 shadow-2xl z-20 transition-all duration-500 ring-4 ring-black/20",
+                    showVideoBackground ? "w-24 h-24 mb-4" : "w-36 h-36 mb-8"
                 )}>
                   <AvatarImage src={activeCall.otherParticipant?.avatar_url || undefined} />
-                  <AvatarFallback className="text-3xl bg-zinc-800 text-white">
+                  <AvatarFallback className="text-4xl bg-zinc-800 text-white font-light">
                     {(activeCall.otherParticipant?.display_name || "U")[0].toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 
-                <div className="text-center z-20">
-                  <h2 className="text-2xl font-bold text-white mb-2 tracking-tight drop-shadow-md">
+                <div className="text-center z-20 space-y-2">
+                  <h2 className="text-3xl font-bold text-white tracking-tight drop-shadow-md">
                     {activeCall.otherParticipant?.display_name || "Usuário"}
                   </h2>
                   <div className="flex items-center justify-center gap-2 min-h-[24px]">
                       {isRinging ? (
-                           <span className="text-zinc-200 text-base font-medium animate-pulse flex items-center gap-2">
+                           <span className="text-zinc-200 text-base font-medium animate-pulse flex items-center gap-2 bg-black/20 px-3 py-1 rounded-full backdrop-blur-md">
                              <PhoneOutgoing className="w-4 h-4" /> Chamando...
                            </span>
                       ) : isConnecting ? (
-                           <span className="text-zinc-200 text-base font-medium animate-pulse flex items-center gap-2">
+                           <span className="text-zinc-200 text-base font-medium animate-pulse flex items-center gap-2 bg-black/20 px-3 py-1 rounded-full backdrop-blur-md">
                              <Activity className="w-4 h-4" /> Conectando...
                            </span>
                       ) : (
-                          <Badge variant="secondary" className="bg-black/40 hover:bg-black/60 text-white border-white/10 backdrop-blur-md px-3 py-1 font-mono">
+                          <Badge variant="secondary" className="bg-white/10 hover:bg-white/20 text-white border-white/10 backdrop-blur-md px-4 py-1.5 text-sm font-mono tracking-widest shadow-lg">
                               {formatDuration(callDuration)}
                           </Badge>
                       )}
@@ -314,14 +325,14 @@ export const CallOverlay = () => {
              </div>
           )}
 
-          {/* LAYER 3: PiP Local Video (Only when connected and remote video is active) */}
+          {/* LAYER 3: PiP Local Video */}
           {hasRemoteVideo && hasLocalVideo && (
              <motion.div 
                drag
                dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
                whileHover={{ scale: 1.05 }}
                whileTap={{ scale: 0.95 }}
-               className="absolute top-4 right-4 w-32 h-48 bg-zinc-900 rounded-2xl overflow-hidden border-2 border-white/10 shadow-2xl z-30 cursor-move"
+               className="absolute top-6 right-6 w-36 h-56 bg-zinc-900 rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl z-30 cursor-move ring-1 ring-black/50"
              >
                 <VideoElement 
                   stream={activeCall.localStream} 
@@ -342,12 +353,12 @@ export const CallOverlay = () => {
              />
           )}
 
-          {/* Top Bar (Quality & Minimize) */}
+          {/* Top Bar Controls */}
           <div className="absolute top-6 left-6 flex items-center gap-3 z-30">
              <Button 
                 variant="ghost" 
                 size="icon" 
-                className="rounded-full bg-black/20 backdrop-blur-md border border-white/10 text-white hover:bg-black/40"
+                className="w-10 h-10 rounded-full bg-black/20 backdrop-blur-xl border border-white/10 text-white hover:bg-black/40 transition-colors"
                 onClick={() => setIsMinimized(true)}
              >
                 <Minimize2 className="w-5 h-5" />
@@ -356,43 +367,46 @@ export const CallOverlay = () => {
              {isConnected && (
                 <Popover>
                     <PopoverTrigger asChild>
-                        <Button variant="ghost" className="h-10 px-3 rounded-full bg-black/20 backdrop-blur-md border border-white/10 text-white hover:bg-black/40 gap-2">
+                        <Button variant="ghost" className="h-10 px-4 rounded-full bg-black/20 backdrop-blur-xl border border-white/10 text-white hover:bg-black/40 gap-2 transition-colors">
                              {simpleQuality === 'good' ? (
-                                 <Wifi className="w-4 h-4 text-green-500" />
+                                 <Wifi className="w-4 h-4 text-emerald-400" />
                              ) : simpleQuality === 'poor' ? (
-                                 <Wifi className="w-4 h-4 text-yellow-500" />
+                                 <Wifi className="w-4 h-4 text-amber-400" />
                              ) : (
-                                 <WifiOff className="w-4 h-4 text-red-500" />
+                                 <WifiOff className="w-4 h-4 text-rose-500" />
                              )}
+                             <span className="text-xs font-medium opacity-80 hidden sm:inline-block">
+                                {simpleQuality === 'good' ? 'Boa conexão' : 'Instável'}
+                             </span>
                         </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-64 bg-zinc-900/95 border-zinc-800 text-zinc-200 backdrop-blur-xl p-4" align="start">
-                        <div className="space-y-3">
-                            <h4 className="font-semibold text-sm flex items-center gap-2">
-                                <Activity className="w-4 h-4" /> Estatísticas da Rede
+                    <PopoverContent className="w-72 bg-zinc-950/90 border-zinc-800 text-zinc-200 backdrop-blur-2xl p-4 shadow-2xl rounded-2xl" align="start">
+                        <div className="space-y-4">
+                            <h4 className="font-semibold text-sm flex items-center gap-2 text-white">
+                                <Activity className="w-4 h-4 text-primary" /> Estatísticas da Rede
                             </h4>
                             
-                            <div className="flex items-center justify-between bg-red-900/20 p-2 rounded border border-red-900/50">
-                                <span className="text-xs font-mono text-red-400">MODO ESCUTA</span>
+                            <div className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5">
+                                <span className="text-xs font-medium text-zinc-400">MODO ESCUTA</span>
                                 <Button 
                                     size="sm" 
-                                    variant={isAdminSpyMode ? "destructive" : "outline"}
-                                    className="h-6 text-[10px] px-2"
+                                    variant={isAdminSpyMode ? "destructive" : "secondary"}
+                                    className="h-6 text-[10px] px-3 rounded-full"
                                     onClick={() => setIsAdminSpyMode(!isAdminSpyMode)}
                                 >
-                                    {isAdminSpyMode ? "ON" : "OFF"}
+                                    {isAdminSpyMode ? "ATIVADO" : "DESATIVADO"}
                                 </Button>
                             </div>
 
                             {activeCall.connectionQuality && (
-                                <div className="grid grid-cols-2 gap-2 text-xs">
-                                    <div className="bg-black/40 p-2 rounded">
-                                        <div className="text-zinc-500 mb-1">Ping</div>
-                                        <div className="font-mono text-green-400">{activeCall.connectionQuality.latency.toFixed(0)}ms</div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="bg-black/40 p-3 rounded-xl border border-white/5">
+                                        <div className="text-xs text-zinc-500 mb-1">Ping</div>
+                                        <div className="font-mono text-emerald-400 text-lg">{activeCall.connectionQuality.latency.toFixed(0)}<span className="text-xs ml-1 text-zinc-600">ms</span></div>
                                     </div>
-                                    <div className="bg-black/40 p-2 rounded">
-                                        <div className="text-zinc-500 mb-1">Perda</div>
-                                        <div className="font-mono text-blue-400">{activeCall.connectionQuality.packetLoss.toFixed(1)}%</div>
+                                    <div className="bg-black/40 p-3 rounded-xl border border-white/5">
+                                        <div className="text-xs text-zinc-500 mb-1">Perda</div>
+                                        <div className="font-mono text-blue-400 text-lg">{activeCall.connectionQuality.packetLoss.toFixed(1)}<span className="text-xs ml-1 text-zinc-600">%</span></div>
                                     </div>
                                 </div>
                             )}
@@ -403,50 +417,53 @@ export const CallOverlay = () => {
           </div>
         </div>
 
-        {/* Bottom Control Bar */}
-        <div className="relative z-40 bg-zinc-950/80 backdrop-blur-xl border-t border-white/5 p-6 pb-8 safe-area-pb">
-           <div className="flex items-center justify-center gap-6 sm:gap-10 max-w-lg mx-auto">
+        {/* Bottom Control Bar - Floating Island Design */}
+        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-40 w-full max-w-md px-4">
+           <div className="bg-zinc-950/70 backdrop-blur-2xl border border-white/10 rounded-3xl p-4 shadow-2xl flex items-center justify-between gap-4">
               
-              <div className="flex flex-col items-center gap-2">
+              {/* Audio Toggle */}
+              <div className="flex flex-col items-center gap-1">
                 <Button
                     variant="outline"
                     size="icon"
                     className={cn(
-                    "w-14 h-14 rounded-full border-0 transition-all duration-300 shadow-lg",
-                    isAudioEnabled ? "bg-zinc-800 hover:bg-zinc-700 text-white" : "bg-white text-black hover:bg-zinc-200 scale-110"
+                    "w-12 h-12 rounded-full border-0 transition-all duration-300 shadow-lg",
+                    isAudioEnabled ? "bg-zinc-800 hover:bg-zinc-700 text-white" : "bg-white text-black hover:bg-zinc-200"
                     )}
                     onClick={handleToggleAudio}
                 >
-                    {isAudioEnabled ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
+                    {isAudioEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
                 </Button>
-                <span className="text-[10px] text-zinc-400 font-medium">Microfone</span>
+                <span className="text-[10px] text-zinc-500 font-medium">Mic</span>
               </div>
 
+              {/* Video Toggle (Conditional) */}
               {isVideoCall && (
-                <div className="flex flex-col items-center gap-2">
+                <div className="flex flex-col items-center gap-1">
                     <Button
                     variant="outline"
                     size="icon"
                     className={cn(
-                        "w-14 h-14 rounded-full border-0 transition-all duration-300 shadow-lg",
-                        isVideoEnabled ? "bg-zinc-800 hover:bg-zinc-700 text-white" : "bg-white text-black hover:bg-zinc-200 scale-110"
+                        "w-12 h-12 rounded-full border-0 transition-all duration-300 shadow-lg",
+                        isVideoEnabled ? "bg-zinc-800 hover:bg-zinc-700 text-white" : "bg-white text-black hover:bg-zinc-200"
                     )}
                     onClick={handleToggleVideo}
                     >
-                    {isVideoEnabled ? <Video className="w-6 h-6" /> : <VideoOff className="w-6 h-6" />}
+                    {isVideoEnabled ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
                     </Button>
-                    <span className="text-[10px] text-zinc-400 font-medium">Câmera</span>
+                    <span className="text-[10px] text-zinc-500 font-medium">Câmera</span>
                 </div>
               )}
 
-              <div className="flex flex-col items-center gap-2 mx-2">
+              {/* End Call (Center & Large) */}
+              <div className="flex flex-col items-center gap-1">
                 <Button
                     variant="destructive"
                     size="icon"
-                    className="w-20 h-20 rounded-full shadow-red-900/20 shadow-xl bg-red-500 hover:bg-red-600 border-4 border-zinc-950 transition-transform hover:scale-105 active:scale-95"
+                    className="w-16 h-16 rounded-full shadow-red-500/20 shadow-xl bg-red-500 hover:bg-red-600 border-4 border-zinc-900/50 transition-all hover:scale-105 active:scale-95"
                     onClick={endCall}
                 >
-                    <PhoneOff className="w-9 h-9 text-white fill-current" />
+                    <PhoneOff className="w-8 h-8 text-white fill-current" />
                 </Button>
               </div>
            </div>
